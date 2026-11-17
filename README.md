@@ -126,3 +126,4 @@ Interactive, cloud-ready execution notebooks are available in [`notebooks/`](not
 4. Chen et al. (2018). *Isolating Sources of Disentanglement in Variational Autoencoders*. NeurIPS.
 5. Kumar et al. (2018). *Variational Inference of Disentangled Latent Concepts from Unlabeled Observations*. ICLR.
 6. Locatello et al. (2019). *Challenging Common Assumptions in the Unsupervised Learning of Disentangled Representations*. ICML.
+7. Matthey et al. (2017). *dSprites: Disentanglement testing Sprites dataset*. [https://github.com/deepmind/dsprites-dataset/](https://github.com/deepmind/dsprites-dataset/).
