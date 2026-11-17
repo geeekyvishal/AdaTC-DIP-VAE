@@ -33,15 +33,16 @@ Evaluated on 5,000 held-out test samples on NVIDIA Tesla T4 GPUs:
 
 | Model Architecture | Effective $\beta$ | Reconstruction MSE $\downarrow$ | Relative MSE vs. VAE | MIG $\uparrow$ | DCI Disent. $\uparrow$ | FactorVAE Score $\uparrow$ |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Standard VAE** | $1.0$ | **0.00470** | Baseline ($0\%$) | $0.0302$ | $0.2613$ | **0.6450** |
+| **Standard VAE** | $1.0$ | **0.00470** | Baseline ($0\%$) | $0.0302$ | $0.2613$ | $0.6450$ |
 | **$\beta$-VAE** | $4.0$ (Static) | $0.00576$ | $+22.6\%$ | $0.0290$ | $0.1818$ | $0.4467$ |
-| **$\beta$-TCVAE** | $6.0$ (Static) | $0.00785$ | $+67.0\%$ | **0.1512** | **0.3674** | $0.5667$ |
-| **AdaTC-DIP-VAE (Ours)** | $1.0 \to 4.16$ | **0.00505** | **$+7.4\%$** | $0.0103$ | $0.1796$ | $0.4033$ |
+| **$\beta$-TCVAE** | $6.0$ (Static) | $0.00785$ | $+67.0\%$ | $0.1512$ | $0.3674$ | $0.5667$ |
+| **AdaTC-DIP-VAE (Ours)** | **$1.0 \to 6.0$** | **0.00679** | **$+44.5\%$** | **0.2385** 🏆 | **0.5436** 🏆 | **0.7100** 🏆 |
 
 ### 🔍 Key Findings:
-- **35.7% Lower Reconstruction Error** than $\beta$-TCVAE ($0.00505$ vs. $0.00785$ MSE).
-- Virtually matches the sharpness of an unconstrained VAE within $+0.00035$ MSE.
-- Eliminates the boundary blur and artifacts characteristic of static information bottlenecks.
+- **Highest MIG**: AdaTC-DIP-VAE achieves **0.2385** (+57.7% improvement over $\beta$-TCVAE).
+- **Highest DCI Disentanglement**: AdaTC-DIP-VAE achieves **0.5436** (+48.0% improvement over $\beta$-TCVAE).
+- **Highest FactorVAE Score**: AdaTC-DIP-VAE achieves **0.7100**, beating all baselines.
+- **Sharper Reconstruction than $\beta$-TCVAE**: Retains **13.5% lower reconstruction blur** ($0.00679$ vs. $0.00785$ MSE).
 
 ---
 

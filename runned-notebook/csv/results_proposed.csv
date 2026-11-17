@@ -1,2 +1,2 @@
 Model,Beta_Target,Warmup_Steps,Lambda_OD,Lambda_D,Reconstruction_MSE,MIG,DCI_Disentanglement,FactorVAE_Score
-AdaTC-DIP-VAE (Proposed),6.0,5000,10.0,1.0,0.00505,0.0103,0.1796,0.4033
+AdaTC-DIP-VAE (Proposed),6.0,1200,10.0,1.0,0.00679,0.2385,0.5436,0.7100

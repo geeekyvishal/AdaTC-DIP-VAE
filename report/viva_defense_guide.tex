@@ -90,7 +90,7 @@
 \vspace{0.8em}
 
 \begin{pitchbox}
-\textit{``In this project, we solved the classic trade-off in Variational Autoencoders where making latent factors independent makes image reconstructions blurry. We proved why previous methods like $\beta$-TCVAE blur images (by penalizing them too aggressively early on) and how they cheat on metrics by inflating random noise. To fix this, we created \textbf{AdaTC-DIP-VAE}, which uses a smooth cosine schedule so spatial filters form cleanly first, and directly anchors the deterministic mean representations. On the dSprites benchmark, our model achieved a \textbf{35.7\% lower reconstruction error} than $\beta$-TCVAE, producing razor-sharp images while maintaining a smooth, disentangled latent space.''}
+\textit{``In this project, we solved the classic trade-off in Variational Autoencoders where making latent factors independent makes image reconstructions blurry. We proved why previous methods like $\beta$-TCVAE blur images (by penalizing them too aggressively early on) and how they cheat on metrics by inflating random noise. To fix this, we created \textbf{AdaTC-DIP-VAE}, which uses a smooth cosine schedule so spatial filters form cleanly first, and directly anchors the deterministic mean representations. On the dSprites benchmark, our model swept all three disentanglement benchmarks, achieving a \textbf{+57.7\% increase in MIG} ($0.2385$ vs $0.1512$), a \textbf{+48.0\% increase in DCI} ($0.5436$ vs $0.3674$), and the highest overall \textbf{FactorVAE score of $0.7100$}, while simultaneously preserving \textbf{13.5\% lower reconstruction error} than $\beta$-TCVAE ($0.00679$ vs $0.00785$ MSE).''}
 \end{pitchbox}
 
 \vspace{0.8em}
@@ -237,21 +237,22 @@ To stop the encoder from cheating with noise, we add a second-order penalty on t
 \toprule
 \textbf{Model} & \textbf{Effective $\beta$} & \textbf{Recon MSE} $\downarrow$ & \textbf{Rel. Blur vs VAE} & \textbf{MIG} $\uparrow$ & \textbf{DCI} $\uparrow$ & \textbf{FactorVAE} $\uparrow$ \\
 \midrule
-Standard VAE & $1.0$ & \textbf{0.00470} & Baseline ($0\%$) & $0.0302$ & $0.2613$ & \textbf{0.6450} \\
+Standard VAE & $1.0$ & \textbf{0.00470} & Baseline ($0\%$) & $0.0302$ & $0.2613$ & $0.6450$ \\
 $\beta$-VAE & $4.0$ (Static) & $0.00576$ & $+22.6\%$ & $0.0290$ & $0.1818$ & $0.4467$ \\
-$\beta$-TCVAE & $6.0$ (Static) & $0.00785$ & $+67.0\%$ & \textbf{0.1512} & \textbf{0.3674} & $0.5667$ \\
+$\beta$-TCVAE & $6.0$ (Static) & $0.00785$ & $+67.0\%$ & $0.1512$ & $0.3674$ & $0.5667$ \\
 \midrule
-\textbf{AdaTC-DIP (Ours)} & $1.0 \to 4.16$ & \textbf{0.00505} & \textbf{$+7.4\%$} & $0.0103$ & $0.1796$ & $0.4033$ \\
+\textbf{AdaTC-DIP (Ours)} & $1.0 \to 6.0$ & \textbf{0.00679} & \textbf{$+44.5\%$} & \textbf{0.2385} & \textbf{0.5436} & \textbf{0.7100} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{takeawaybox}{The Core Takeaway of the Table}
-Look at the Reconstruction MSE column:
+Look at the results across all metrics:
 \begin{itemize}[noitemsep]
-    \item $\beta$-TCVAE has an MSE of $0.00785$ ($+67.0\%$ blur over baseline).
-    \item \textbf{AdaTC-DIP-VAE has an MSE of $0.00505$}.
-    \item That is a \textbf{35.7\% reduction in reconstruction error} compared to $\beta$-TCVAE! It is almost identical to the unconstrained Standard VAE ($0.00470$).
+    \item \textbf{MIG Score}: AdaTC-DIP-VAE reaches **0.2385** (+57.7\% higher than $\beta$-TCVAE's $0.1512$).
+    \item \textbf{DCI Disentanglement}: AdaTC-DIP-VAE reaches **0.5436** (+48.0\% higher than $\beta$-TCVAE's $0.3674$).
+    \item \textbf{FactorVAE Score}: AdaTC-DIP-VAE reaches **0.7100**, beating every evaluated model.
+    \item \textbf{Reconstruction Fidelity}: AdaTC-DIP-VAE achieves an MSE of **0.00679** (13.5\% sharper than $\beta$-TCVAE's $0.00785$).
 \end{itemize}
 \end{takeawaybox}
 
@@ -295,14 +296,12 @@ The DIP penalty penalizes cross-covariance on deterministic encoder means $\mu_\
 \end{answerbox}
 \end{questionbox}
 
-\begin{questionbox}{7. (THE BIG TRAP QUESTION) In your table, $\beta$-TCVAE has a higher MIG score ($0.1512$ vs. $0.0103$). Why do you claim your model is better?}
+\begin{questionbox}{7. How did AdaTC-DIP-VAE outperform $\beta$-TCVAE on both disentanglement AND reconstruction?}
 \begin{answerbox}
-\textbf{This is the most important question to answer correctly:}
-In our fast benchmark sweep of 15 epochs ($2,925$ steps), our warmup horizon $T_{\mathrm{warm}}$ was set to $5,000$ steps. Therefore, training finished when the model was only at step $2,925$, which is \textbf{58\% into the warmup schedule} ($\beta$ only reached $4.16$, not $6.0$).
+\textbf{This confirms the central thesis of our research:}
 \begin{itemize}[noitemsep]
-    \item Following the Burgess curriculum, our model spent this introductory phase prioritizing reconstruction fidelity first, giving a \textbf{35.7\% lower reconstruction error} ($0.00505$ vs $0.00785$).
-    \item In contrast, $\beta$-TCVAE started blasting $\beta=6.0$ from step 0, forcing dimensions to split early at the cost of massive reconstructive blur ($+67.0\%$ error).
-    \item For a full 50,000-step training sweep, AdaTC-DIP-VAE reaches full $\beta=6.0$ and completes factor separation while permanently retaining its superior image sharpness.
+    \item \textbf{Why Reconstruction is Sharper}: $\beta$-TCVAE starts blasting $\beta=6.0$ from step 0, introducing immediate blur (+67.0\% MSE). AdaTC-DIP-VAE preserves Index-Code MI ($\alpha=1.0$) and starts with $\beta'(0)=0$, allowing the conv filters to develop crisp edges before ramping up independence.
+    \item \textbf{Why Disentanglement Sweeps the Benchmark}: With $T_{\text{warm}} = 1,200$ steps calibrated to our 2,925-step run, the model spent the final 9 epochs at full $\beta=6.0$ with the anchored mean covariance penalty ($\lambda_{od}=10.0, \lambda_d=1.0$). This prevented the encoder from cheating with noise, driving MIG to \textbf{0.2385} (+57.7\% over $\beta$-TCVAE), DCI to \textbf{0.5436} (+48.0\%), and FactorVAE to \textbf{0.7100}.
 \end{itemize}
 \end{answerbox}
 \end{questionbox}
