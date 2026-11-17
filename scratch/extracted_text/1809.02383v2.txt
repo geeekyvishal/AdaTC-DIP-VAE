@@ -1,0 +1,950 @@
+--- PAGE 1 ---
+Group-based Learning of Disentangled Representations
+with Generalizability for Novel Contents
+Haruo Hosoya
+ATR International, Kyoto, Japan
+hosoya@atr.jp
+Abstract
+Sensory data are often comprised of independent
+content and transformation factors. For example,
+face images may have shapes as content and poses
+as transformation. To infer separately these factors
+from given data, various “disentangling” models
+have been proposed. However, many of these are
+supervised or semi-supervised, either requiring at-
+tribute labels that are often unavailable or disallow-
+ing for generalization over new contents. In this
+study, we introduce a novel deep generative model,
+called group-based variational autoencoders. In this,
+we assume no explicit labels, but a weaker form of
+structure that groups together data instances having
+the same content but transformed differently; we
+thereby separately estimate a group-common factor
+as content and an instance-speciﬁc factor as transfor-
+mation. This approach allows for learning to repre-
+sent a general continuous space of contents, which
+can accommodate unseen contents. Despite the sim-
+plicity, our model succeeded in learning, from ﬁve
+datasets, content representations that are highly sep-
+arate from the transformation representation and
+generalizable to data with novel contents. We fur-
+ther provide detailed analysis of the latent content
+code and show insight into how our model obtains
+the notable transformation invariance and content
+generalizability.
+1 Introduction
+Sensory data are often composed of multiple independent
+factors. For example, 3D face images usually consist of the
+content, representing how the face is shaped, and the trans-
+formation, representing how the face is posed or expressing.
+Humans are generally good at inferring and separating such
+factors from given inputs without much supervision. More-
+over, once discovering such factors, one can automatically
+generalize this knowledge for novel contents, e.g., faces of
+unseen identities. How can such ability be achieved computa-
+tionally?
+The content-transformation separation problem [Tenen-
+baum and Freeman, 2000] has recently been attracting much
+attention, in accordance with the progress of deep gener-
+ative techniques such as variational autoencoders (V AE)
+[Kingma and Welling, 2014] and generative adversarial learn-
+ing (GAN) [Goodfellow et al., 2014], and nowadays often
+called “disentangling.” For this purpose, a number of su-
+pervised or semi-supervised models have been proposed ex-
+ploiting labels in various ways. The most typical approach
+learns a generative model by explicitly supplying class la-
+bels to the content variable while extracting the remaining
+factor in the transformation variable [Kingma et al., 2014;
+Cheung et al., 2014; Siddharth et al., 2017]. However, since
+the content representation in such approach is often restricted
+to the classes seen during training, it does not generalize for
+unseen classes. Other approaches use a more sophisticated
+method, such as adversarial learning, that exploits labels so
+as to make the content representation as irrelevant as possible
+to transformation [Wang et al., 2017; Lample et al., 2017;
+Mathieu et al., 2016]. Although these approaches can poten-
+tially allow for generalization over new contents, their require-
+ments of speciﬁc kinds of label are often difﬁcult to fulﬁll,
+e.g., attribute labels corresponding to transformation.
+In this study, we propose a new deep generative model,
+called group-based variational autoencoders (GV AE), for
+content-transformation separation. In GV AE, we do not re-
+quire explicit labels in the dataset. Instead, we assume a
+weaker structure that groups together multiple data instances
+(like images) containing the same content but transformed
+differently. Then, our model learns to extract the content as
+the factor common within each group and the transformation
+as the factor speciﬁc to each instance. For example, from
+the set of groups of face images as in Figure 1A, the facial
+shape can be extracted as the group-common factor and the
+facial pose and expression as the instance-speciﬁc factor. Our
+grouping assumption is quite general in the sense that such
+structure can be derived not only from class-labeled data by
+grouping instances of the same class, but also from video data
+by grouping frames in the same or nearby sequence. Further,
+this approach allows for generalization over novel contents:
+we use a continuous variable to form a general “space” of con-
+tent (e.g., a space of facial shapes) and thereby can represent
+an inﬁnite number of contents including those not seen during
+training (Figure 1B).
+Our speciﬁc contributions are (i) to describe a novel learning
+method that takes a grouped dataset (with no other labels)
+arXiv:1809.02383v2  [cs.LG]  25 Jan 2021
+
+--- PAGE 2 ---
+(B) (C)
+(D)(A)instances
+groups
+y1 y2 yK z
+x1 x2 xK
+input group of instances
+transformations content
+content
+transformation 1
+transformation 2
+transformation 3
+seen contents
+unseen contents
+g/r
+x1 x2 xK
+zzzzzzzzzzzzzzzzzzz z
+L
+y1 y2 yK
+x1 x2 xK
+^ ^ ^
+...
+...
+...
+g/r g/r
+f f f
+h/s
+average
+h/s h/s
+Figure 1: (A) Example of grouped data. Each column is a group of face images of the same person (content) with different views (transformation).
+(B) A continuous space of contents learned from training data can accommodate novel contents. (C) The graphical model. Each instance xk is
+generated from the instance-speciﬁc transformation variable yk and the group-common content variable z. (D) Algorithmic outline of GV AE
+learning. The encoders g and r given an individual image xk compute the corresponding transformation representation yk, while the encoders
+h and s followed by averaging compute the common content representation z. The decoder f then reconstructs each image ˆxk by combining
+the corresponding transformation yk and the common content z. (See text for details.)
+and separately extracts group-common and instance-speciﬁc
+factors, (ii) to show, qualitatively and quantitatively, that this
+method learns highly separate representation of content and
+transformation and generalizes it to new contents, for ﬁve
+datasets, and (iii) to provide detailed analysis of latent code to
+reveal insight into the generalizable disentangling.
+2 Related Work
+As already mentioned, a number of supervised or semi-
+supervised approaches have been developed for disentangling.
+The simplest approach is to explicitly supply the content in-
+formation and infer the transformation variable as the re-
+maining factor [Kingma et al., 2014; Cheung et al., 2014;
+Siddharth et al., 2017 ]. However, the prior studies in this
+approach have typically supplied class labels for supervision
+(since these are the only labels available in most datasets),
+represented them in categorical variables, and estimated a gen-
+erative model conditioned on the class. Since such estimated
+model would have little useful information for unseen classes,
+generalization for new contents is difﬁcult.
+In other supervised approaches, more sophisticated mech-
+anisms have been devised to exploit labels for discovering
+a transformation-invariant content representation in a con-
+tinuous variable. For example, [Wang et al., 2017] has in-
+troduced a mapping (deep net) from labels to latent code
+while maintaining consistency with another mapping from
+input images to the same latent code; [Lample et al., 2017;
+Mathieu et al., 2016] have used adversarial learning to make
+the content code as irrelevant as possible to transformation us-
+ing labels. While effective disentangling can thus be achieved
+with the aid of labels, requirement for labels, in particular,
+attribute labels corresponding to transformation, seems rather
+restrictive.
+Concurrently with ours, one recent study has developed an-
+other group-based method called Multi-Level V AE (MLV AE)
+[Bouchacourt et al., 2018]. In this, they adopt a sophisticated
+technique called “evidence accumulation” for estimating the
+group-common factor. However, as we show later, this par-
+ticular technique has an unfortunate property that the learned
+content representation often becomes dependent on the trans-
+formation, which potentially conﬂicts the goal of disentangling
+(Section 5). Indeed, due to this, MLV AE often results in quan-
+titatively poorer disentangling representations compared to our
+GV AE (Section 4). In[Chen et al., 2018], a group-based GAN
+method has been proposed for learning separate representation
+of content and transformation. However, their goal is rather
+different from ours, as they focus on randomly generating
+new realistic images while lacking a way to infer content and
+transformation information from given images.
+Some studies have investigated disentangling for sequential
+data like video [Yanget al., 2015; Denton and Birodkar, 2017].
+They crucially assumed that the content variable remains simi-
+lar in consecutive frames, as inspired by the temporal coher-
+ence principle [F¨oldi´ak, 1991]. Although this idea is related to
+the group-based approach, the sequence-based methods have
+used additional mechanisms to exploit ordering among data in-
+stances, e.g., a recurrent neural network to predict future states
+from past states [Yang et al., 2015] or adversarial training to
+take temporal structure into account [Denton and Birodkar,
+2017].
+Some unsupervised approaches require no label or grouping
+in data, but optimizes the efﬁciency of the latent representa-
+tion, either by maximizing mutual information between hid-
+den variables in a GAN-based model [Chen et al., 2016] or
+by adjusting a so-called β-term in a variational lower bound
+[Higgins et al., 2016]. Neither study reported generalizability
+over novel contents.
+
+--- PAGE 3 ---
+3 Methods
+3.1 Model
+We assume a dataset Dconsisting of N groups, in which
+each group has K data instances, (x(n)
+1 ,...,x (n)
+K ), where
+x(n)
+k ∈RD is a data instance indexed by the group number
+nand the instance number k. For example, Figure 1A shows
+a set of 5 groups of 3 data instances, where each instance is
+an image. (For brevity, we sometimes elide the superscript
+(n) below.) We assume independence between groups but not
+instances within a group. We intend that each group contains
+the same content with (possibly) different transformations. In
+other words, the factor common among the instances corre-
+spond to the content, while the factor differentiating them
+correspond to the transformation. (We do not require align-
+ment in transformation at each instance number. Also, we do
+not forbid that different groups happen to contain the same
+content.)
+For such grouped data, we consider the following probabilis-
+tic generative model with two types of hidden variables: the
+(instance-speciﬁc) transformation variables y1,...,y K ∈RL
+and the (group-common) content variable z ∈ RM (Fig-
+ure 1C):
+p(z) =N(0,I) (1)
+p(yk) =N(0,I) (2)
+pθ(xk|yk,z) =N(fθ(yk,z),I) (3)
+for k= 1,...,K . Here, fθ is a decoder deep net with weight
+parameters θ. In the model, the content z or each transfor-
+mation yk is ﬁrst generated from the standard Gaussian prior.
+Then, each instance xk is generated from the decoder fθ ap-
+plied to the corresponding transformation yk and the common
+content z, added with Gaussian noise of unit variance.
+3.2 GV AE
+For learning, we extend the V AE approach introduced by
+[Kingma and Welling, 2014 ], which uses encoder models
+based on deep nets to approximate posterior distributions for
+hidden variables. (Figure 1D illustrates the outline of the
+learning algorithm.) First, we estimate each transformation yk
+from the corresponding input instance xk as follows:
+qφ,ξ(yk|xk) =N(gφ(xk),rξ(xk)) (4)
+where we use an encoder deep net gφ with weight parameters
+φfor estimating the mean and another deep net rξ (positively
+valued) with weight parametersξfor estimating the dimension-
+wise variances.1 For inference of content, we could likewise
+assume a pair of deep nets to estimate the content zfrom all
+instances x1,...,x K, but it cannot exploit symmetry in the
+instances in the same group. Instead, we take the following
+simpler approach:
+qψ,π(z|x1,...,x K) =N
+(
+1
+K
+K∑
+k=1
+hψ(xk), 1
+K
+K∑
+k=1
+sπ(xk)
+)
+(5)
+1Since we consider only Gaussians with diagonal covariances, we
+specify a vector of variances in the second parameter to Gaussian
+distribution as convention.
+That is, the encoder deep netshψ and sπ ﬁrst each estimate the
+mean and variance of the posterior distribution of the individ-
+ual content for each instance xk. Then, we infer the common
+content z for all instances as the average of all the individ-
+ual contents. Note that, therefore, the variance of zbecomes
+the average of the individual variances. The intention here
+is that, as we attempt to reconstruct each instance xk by the
+common content zwith the individual transformation yk, all
+the individual contents hψ(x1),...,h ψ(xK) are encouraged
+to converge to an equal value in the course of learning. Thus,
+z will eventually become a common factor of all xk, while
+each yk will become a differentiating factor.
+To train the model, we consider the following variational
+lower bound of the log likelihood:
+log pθ(x) ≥Eqφ,ξ,ψ,π(y,z|x)
+[K∑
+k=1
+log pθ(xk|yk,z)
+]
+−
+K∑
+k=1
+KL(qφ,ξ(yk|xk) ∥p(yk))
+−KL(qψ,π(z|x) ∥p(z)) =L(x) (6)
+where x = (x1,...,x K) and y = (y1,...,y K). Then, our
+goal is to maximize the lower bound for the whole dataset D:
+L(D) = 1
+N
+N∑
+n=1
+L(x(n)) (7)
+This can be solved by the standard V AE techniques (stochas-
+tic variational Bayes, reparametrization, etc.; [Kingma and
+Welling, 2014]).
+3.3 Experimental Set-up
+We prepared the following ﬁve datasets. (1) Multi-PIE: multi-
+viewed natural face images derived from [Gross et al., 2010];
+grouping by the subject and (cloth/hair) fashion while varying
+the view and expression; the training and test sets with dis-
+joint 268 and 69 subjects. (2) Chairs: multi-viewed synthetic
+chair images derived from [Dosovitskiy and Springenberg,
+2015]; grouping by the chairs type while varying the view;
+the training and test sets with disjoint 650 and 159 types. (3)
+KTH: image frames from video clips of human (only pedes-
+trian) motion derived from [Sch¨uldt et al., 2004]; grouping
+by the video clip while varying the position of the subject;
+the training and test sets with disjoint 20 and 5 subjects. (4)
+Sprites: multi-posed synthetic game character images [Reed
+et al., 2015]; grouping by the character id while varying the
+pose and wear; the training and test sets with disjoint 500 and
+100 ids. (5) NORB: multi-viewed toy images [LeCun et al.,
+2004]; grouping by the toy id varying the view and lighting;
+the training and test sets with disjoint 25 and 25 ids. Note that
+labels were used only to form groups for some datasets but
+never explicitly given to the training algorithm; no label was
+used to form groups in KTH (video data). See Appendix A for
+details of these datasets.
+For each dataset, we built a number of GV AE models with
+convolutional neural nets for the encoders (g, r, h, and s) and
+a deconvolutional neural net as the decoder (f). Each encoder
+
+--- PAGE 4 ---
+contents contents
+training data test data (new identity)
+transformations
+transformations
+(A) (C)
+(B) (D)
+sample sample
+SwappingInterpolation
+α=0 α=1 α=0 α=1
+Figure 2: Illustration of generalizable disentangling in a GV AE model trained with Multi-PIE. (A) Swapping for training images. Each image
+in the matrix was generated from the content representation of a sample image in the top row and the transformation representation of another
+sample image in the left-most column. Red box: sample image. (B) Interpolation for training images. For two training sample images, each
+image was generated from a linear interpolation (or extrapolation) of the content representations of the two sample images, in conjunction with
+the transformation representation of either sample image. Green box: images corresponding to the sample. (C,D) Analogous swapping and
+interpolation for test images. The test images have distinct facial identities from the training images.
+had three convolution layers followed by two fully connected
+layers (intervened with RELU nonlinearity); each decoder had
+a reverse architecture. The top layer of encoder r or shad
+nonlinearity to ensure positivity: F(a) = exp(a/2). We used
+the same architecture for all models with the transformation
+dimension L= 3(except L= 2for Chairs and KTH) and the
+content dimension M = 100. See Appendix B for details of
+the architecture.
+We found it crucial to choose a very low dimension for
+the transformation variable ( L = 2 or 3). In this way, the
+transformation variable was endowed with a just enough space
+to encode the instance-speciﬁc factor and no spare space to
+encode the common factor. If the dimensionality was instead
+much raised, then the transformation variable would learn
+to represent all aspects of inputs including the contents and
+thereby the content variable would become degenerate. Apart
+from this, the results were generally stable across choices of
+other parameters such as deep net architectures.
+To train each model, we ﬁrst randomly initialized the weight
+parameters of the encoders and decoder and then optimized
+the objective (7) with respect to the weight parameters using
+the training set. Training proceeded by mini-batches (size
+100), where each group was formed on the ﬂy by randomly
+choosing 5 images according to the dataset-speciﬁc grouping
+policy described above (K = 5). We used Adam optimizer
+[Kingma and Ba, 2015] with the recommended optimization
+parameters. During training, we monitored effectiveness of
+each latent dimension (s.d. ≥0.1) and discarded models with
+very low effective dimensions (0 for y, or ≤3 for z).
+4 Results
+4.1 Examples
+We ﬁrst illustrate the learned disentangled representations in
+two ways. Swapping: given two lists of inputs x1,...,x I and
+x′
+1,...,x ′
+J, we show a matrix of images, each generated from
+the content representation estimated from an input xi and the
+transformation representation estimated from another input
+x′
+j: f(g(x′
+j),h(xi)). Interpolation: given two inputs x1 and
+x2, we show a matrix of images, each generated from a linear
+interpolation of the content representations estimated for both
+inputs, with the transformation representation for either input:
+f(g(xi),(1 −α)h(x1) +αh(x2)) for 0 ≤α≤1 for i= 1,2;
+extrapolation is also possible with αoutside this range. Note
+that we estimated the latent representation from a single image
+(with no grouping) and did not use the variance encoders r
+and s.
+Figure 2A shows a swapping matrix for a GV AE model
+trained with Multi-PIE dataset. The top row and the left-
+most column show two lists of sample images in the train-
+ing set. In the matrix, we can observe reasonably successful
+disentangling: each generated image reﬂects the subject of
+the corresponding input in the ﬁrst list and the view of the
+corresponding input in the second list. Figure 2B shows an
+interpolation matrix from the same model for sample training
+images. Note the smooth transition of the generated images
+from one identity to another. Also some generated images for
+extrapolated contents exhibit exaggerated facial features (e.g.,
+hair).
+
+--- PAGE 5 ---
+success rate (%) 1-shot classiﬁcation 5-shot classiﬁcation chance
+GV AE MLV AE V AE GV AE MLV AE V AE
+MultiPIE 44.3±3.2 24.5±3.9 9.1±0.8 64.0±2.0 48.5±4.3 19.0±1.6 0.3
+Chairs 58.4±6.7 53.3±5.2 18.4±3.0 82.7±3.9 80.7±4.3 41.3±6.3 0.6
+KTH 27.1±1.6 30.1±0.6 14.2±1.7 48.9±1.8 55.3±0.8 35.6±3.1 0.4
+Sprites 81.3±7.4 53.5±16.7 5.0±1.4 84.7±4.8 65.0±14.6 9.5±3.1 1.0
+NORB 37.5±1.3 31.2±1.9 12.9±3.7 44.7±2.1 42.7±2.9 21.8±7.0 4.0
+Table 1: Quantitative comparison of generalizability of disentangled representations evaluated by few-shot classiﬁcation. The success rate
+(mean and s.d.) is shown for each method and for each dataset in the 1-shot or 5-shot case, along with the chance level.
+(A) Multi-PIE
+success rate
+view
+ view
+0.2
+0.4
+0.6
+Chairs(B)
+Figure 3: (A) The success rate (y-axis) for each view (x-axis; two down-looking views are omitted) from a GV AE model trained with Multi-PIE.
+(B) Analogous result for Chairs. (Two colors correspond to different vertical angles of view; see legend).
+Figure 2CD shows swapping and interpolation matrices for
+sample images in the test set. Generalization of disentangling
+to the test case can be observed with a quality more or less
+similar to the training case. This is quite remarkable, given
+the fact that none of the subjects here had been seen during
+the training.
+4.2 Quantitative Comparison
+We next show the results of our quantitative evaluation. We
+here use accuracy of few-shot classiﬁcation as criterion. The
+rationale is that, since the learned content representation is ex-
+pected to eliminate information on transformation, this should
+allow for transformation-invariant recognition of objects. In
+particular, if the content representation is highly independent
+from transformation and highly generalizable for novel con-
+tents, then it should ideally be sufﬁcient to hold the content
+representation of a single example of each unseen class in or-
+der to classify the remaining images (one-shot classiﬁcation).
+Thus, the better the generalizable disentangled representation
+is, the more accurate the few-shot classiﬁcation should be.
+Our evaluation procedure goes as follows. For a dataset,
+we formed a split of the test images into the gallery includ-
+ing Srandom images for each class and the probe including
+the remaining images ( S-shot case). Here, a class referred
+to each subject/fashion combination in Multi-PIE (378 test
+classes), to each chair type in Chairs (159 test classes), to each
+video clip id in KTH (240 test classes), to each sprite id in
+Sprites (100 test classes), and to each toy id in NORB (25
+test classes). Then, for a trained model, we classiﬁed each
+probe image as the class of the gallery image that had the max-
+imal cosine similarity with the input probe image in the space
+of content variable z; classiﬁcation succeeded if the inferred
+class matched the actual class; the success rate was averaged
+over 100 different splits. We examined 10 separately trained
+models (different only in the initial weights) for each dataset.
+For comparison, we also trained models with the ML-
+V AE method[Bouchacourt et al., 2018], another group-based
+method; the training condition was the same. In addition, we
+trained GV AE models with no grouping (K = 1). This in fact
+corresponds to a basic V AE model with a single variable since
+the content and transformation variables, without grouping,
+can be integrated without loss of generality.
+Table 1 summarizes the result, showing the success rate
+(mean and s.d. over the 10 model instances) of one-shot or
+ﬁve-shot classiﬁcation for each method and for each dataset.
+In most cases, GV AE outperformed the other methods. In
+particular, for Multi-PIE and Sprites datasets, the scores for
+GV AE were much higher than MLV AE. V AE models always
+performed poorly (though far better than the chance level); this
+condition in fact failed disentangling with no clear content-
+transformation separation and often corrupted generated im-
+ages. Thus, grouping was indeed crucial.
+As a side interest, we wondered which view of 3D objects
+led to more successful recognition. Figure 3 shows the view-
+wise success rates of one-shot classiﬁcation in GV AE models
+for Multi-PIE and Chairs. We found that, in both cases, di-
+agonal views always gave better success rates than proﬁle or
+frontal views. This result is intuitive since we can perceive
+better the entire shape of a face or chair from diagonal views
+than other views. Perhaps, this is the reason why photos of
+actors or furniture items are typically taken in diagonal views.
+5 Analysis of Content Coding
+Why did GV AE achieve better generalizable disentangling
+than MLV AE? To gain insight into this question, we have
+conducted detailed analysis of content representation. First
+
+--- PAGE 6 ---
+of all, the most essential difference of MLV AE[Bouchacourt
+et al. , 2018 ] from GV AE is the way inferring the content
+(equation 5), where the posterior distribution is estimated as
+the product of Gaussians for individual instances (“evidence
+accumulation”):
+qψ(z|x1,...,x K) = 1
+Z
+K∏
+k=1
+N(hψ(xk),sπ(xk)) (8)
+where Zis the normalizing constant. Since a product of Gaus-
+sians is a Gaussian, the above deﬁnition can be rewritten as:
+(8) = N
+(∑
+khψ(xk)/sπ(xk)∑
+k1/sπ(xk) , 1∑
+k1/sπ(xk)
+)
+(9)
+where all the multiplications and divisions are dimension-wise.
+Note that the mean of the Gaussian has the form of weighted
+average where the weights are the precisions 1/sπ(xk). Al-
+though GV AE uses simple averaging (equation 5), it is not a
+special case of MLV AE since the variance has a very different
+form. We claim that this evidence accumulation technique
+unfortunately leads to view-dependent content representation
+in MLV AE unlike GV AE.
+First of all, we found that, generally, MLV AE models had
+∼3 times larger number of effective content dimensions than
+GV AE models. To understand why, we picked up one example
+MLV AE model for Multi-PIE, which had 40 effective content
+dimensions, and inspected the structure of the content rep-
+resentation in the 8 most effective dimensions (i.e., with the
+largest s.d.’s). In Figure 4A, each scatter plot (blue) shows the
+estimated precisions 1/s(x) for each view of test images (left-
+proﬁle, frontal, right-proﬁle, etc.), separately for each content
+dimension. The estimated precisions tended to be peaked at
+a particular view while they went down to very low values
+elsewhere (e.g., dim #1 had peak at 45◦left proﬁle), and the
+peak view was different from dimension to dimension. This
+was starkly different in a GV AE model (which had 13 effec-
+tive content dimensions). Figure 4B shows the corresponding
+plot for this model, where the estimated precisions were only
+slightly higher for frontal views compared to proﬁle views
+for most dimensions. Recall that, in MLV AE, because of the
+weighted-average form (equation 9), each estimated mean is
+multiplied with the corresponding estimated precision. Since
+the estimated precisions were very low for the non-peak views
+(Figure 4A), the content dimension would have strong “impact”
+only around the peak views.
+To conﬁrm this, we quantiﬁed how much each content di-
+mension had impact on image generation. We ﬁrst estimated
+the latent variables y = g(x) and z = h(x) for each test im-
+age xand then generated two new images using the estimated
+variables but modifying d-th content dimension. Thereafter,
+we calculated the (normalized) Euclidean distance between
+the two generated images:
+Id(x) = ||f(y,z−
+d ) −f(y,z+
+d )||
+(||f(y,z−
+d )||+ ||f(y,z+
+d )||)/2
+where
+z−
+d = (z1,...,z d−1,µd −3σd,zd+1,...,z M)
+z+
+d = (z1,...,z d−1,µd + 3σd,zd+1,...,z M)
+using the mean µd and s.d. σd of zd (over the test data). We
+called Id(x) “generative impact index.” If the two generated
+images are very different, then the content dimension has a
+large index; otherwise, it has a small index. In Figure 4AB,
+each curve (red) shows generative impact indices for each view
+at each content dimension. We can see that the generative
+impact consistently followed the magnitudes of precisions
+in both MLV AE and GV AE. As a consequence, in MLV AE,
+each dimension had much more impact on image generation
+for high-precision views than low-precision views, whereas
+such contrast was more moderate in GV AE (Figure 4D). Also,
+note that the peak views covered a broad range of views in
+MLV AE, while they were concentrated around the frontal view
+(Figure 4C).
+Thus, MLV AE had view-dependent coding of content. This
+in fact explains the generally larger number of effective con-
+tent dimensionality in MLV AE. That is, in MLV AE, different
+content dimensions seemed to be used for representing differ-
+ent views and therefore encoding all views required a larger
+number of dimensions, whereas each dimension seemed to
+play an equal role in all views in GV AE.
+The view dependency of the estimated precisions in ML-
+V AE may be related to uncertainty coding of facial features.
+That is, since a single image provides only partial information
+for the content, the inference necessarily includes ambiguity.
+For example, from a frontal face image, we are sure about the
+eyes, nose, and mouth, but less sure about the ears; from a
+proﬁle face image, we are sure about the visible side of the
+face, but much less sure about the invisible side. Thus, by tak-
+ing uncertainty into account, we might be able to infer a more
+accurate content representation when integrating estimated
+content information from different views. However, the view-
+dependent representation seems to go in the opposite direction
+to the goal of disentangling—to discover view-invariant rep-
+resentation. This explains the reason for the observed lower
+performance of MLV AE in few-shot classiﬁcation.
+6 Conclusion
+We have proposed group-based V AE as a novel method for
+learning disentangled representations from grouped data. De-
+spite the simplicity, our method achieved effective disentan-
+gling of content and transformation that generalized for test im-
+ages with new contents. We quantitatively evaluated general-
+ization performance using few-shot classiﬁcation and showed
+superiority of our approach to MLV AE for most datasets. Our
+detailed analysis revealed that the performance difference was
+due to the evidence accumulation technique used in MLV AE
+causing transformation dependency of content representation.
+Future investigation may pursue improvement of disentan-
+gling by incorporating some additional constraints such as
+adversarial learning. Also, disentangling for more realistic
+and irregular dataset would be important. Lastly, as the present
+model was initially inspired by ﬁndings in visual neuroscience
+and started as a continuation of our previous theoretical study
+on the primate visual system [Hosoya and Hyv¨arinen, 2016;
+Hosoya and Hyv¨arinen, 2017], we are keen to investigate how
+our model here could serve to explain the underlying learning
+principle in the higher vision.
+
+--- PAGE 7 ---
+0
+5
+10
+0
+0.5
+1
+dim #1
+0
+5
+10
+0
+0.5
+1
+dim #2
+0
+2
+4
+6
+0
+0.5
+1
+dim #3
+0
+2
+4
+0
+0.5
+1
+dim #4
+0
+1
+2
+0
+0.5
+1
+dim #5
+0
+5
+10
+15
+0
+0.5
+1
+dim #6
+0
+2
+4
+6
+0
+0.5
+1
+dim #7
+0
+2
+4
+0
+0.5
+1
+dim #8
+0
+2
+4
+6
+0
+0.5
+1
+1.5
+dim #1
+0
+2
+4
+0
+0.5
+1
+1.5
+dim #2
+0
+0.5
+1
+0
+0.5
+1
+1.5
+dim #3
+0
+2
+4
+0
+0.5
+1
+1.5
+dim #4
+0
+1
+2
+3
+0
+0.5
+1
+1.5
+dim #5
+0
+0.2
+0.4
+0.6
+0
+0.5
+1
+1.5
+dim #6
+0
+0.2
+0.4
+0.6
+0
+0.5
+1
+1.5
+dim #7
+0
+0.5
+1
+0
+0.5
+1
+1.5
+dim #8
+estimated precision 1/ s(x)
+generative impact index
+estimated precision 1/ s(x)
+view
+view
+L     F     R L     F     R L     F     R L     F     R
+L     F     R L     F     R L     F     R L     F     R
+(B)
+(A) MLVAE
+GVAE
+generative impact index
+0
+0.2
+0.4
+0.6
+0 2 4 6
+prob.
+peak view max/min generative impact indices
+L F R
+(C) (D)
+Figure 4: Analysis of latent content representations. (A) Blue: the
+distributions of estimated precisions 1/s(x) for each view for each
+of top 8 content dimensions in an MLV AE model (scale:×103). Red:
+the view-wise normalized distances between two images generated
+from latent variables differing in a particular content dimension (gen-
+erative impact index). (B) Analogous results for a GV AE model. (C)
+The distribution of peak views (in terms of generative impact indices)
+for the effective dimensions in the MLV AE or GV AE model (legend).
+(D) The distribution of ratios of maximum and minimum generative
+impact indices in each model.
+Acknowledgments
+The author expresses special thanks to Aapo Hyv¨arinen, Mo-
+hammad Emtiyaz Khan, and Motoaki Kawanabe for precious
+comments and suggestions. This work has been supported
+by the Commissioned Research of National Institute of In-
+formation and Communications Technology (1940201), the
+New Energy and Industrial Technology Development Orga-
+nization (P15009), and Grants-in-Aid for Scientiﬁc Research
+(18H05021, 18K11517, and 19H04999).
+A Dataset Details
+Multi-PIE The original dataset [Gross et al., 2010] consists
+of natural face images of 337 subjects in 15 views, 3 expres-
+sions, and 4 (cloth/hair) fashions. We used only images under
+a medium lighting (condition 9) and cropped and resized them
+using the manual landmark annotations in [El Shafey et al.,
+2013] (64 ×64 ×3 pixels). We split the data into a training
+set with ∼32K images of 268 subjects and a test set with ∼6K
+images of the remaining 69 subjects. We formed each group
+by randomly choosing face images of the same subject and
+fashion, but varying the view and the expression.
+Chairs The original dataset [Dosovitskiy and Springenberg,
+2015] consists of synthetic multi-viewed chair images of var-
+ious types rendered from 3D models. We used a convenient
+subset [Yanget al., 2015] including images (64×64×3 pixels)
+of 809 chair types in 62 views (31 horizontal and 2 vertical
+angles). We split the data into a training set with∼40K images
+of 650 chair types and a test set with ∼10K images of the re-
+maining 159 chair types. We formed each group by randomly
+selecting chair images of the same type but varying the view.
+KTH The original dataset [Sch¨uldt et al., 2004] consists of
+video clips of human motion of 6 types by 25 subjects, where
+each clip shows one type of motion by a single subject with
+varied settings (background, motion direction, cloth, camera-
+work, etc.). From a subset with pedestrian motions (walking,
+running, and jogging), we created a training set with image
+frames (64 ×64 pixels) from 960 video clips of 20 subjects
+and a test set with image frames from 240 video clips of the
+remaining 5 subjects; we removed frames showing no person.
+We formed each group by randomly selecting image frames in
+the same video clip.
+Sprites The original dataset [Reed et al., 2015] consists of
+synthetic game character images. A structured label is given to
+each image to specify the features of the character; the images
+are varied for the pose and wear. We assigned a unique id to
+each different structured label. We split the data into a training
+set with ∼89K images of 500 ids and a test set with ∼19K
+images of 100 other ids. We formed each group by randomly
+selecting images of the same id but varying the pose and wear.
+NORB The original dataset [LeCun et al., 2004] consists
+of images of 50 toys with various views and lightings. We
+split the data into training and test sets with disjoint ids (each
+∼24k, 25 ids). We formed each group by randomly selecting
+images of the same id but varying the view and lighting.
+B Architecture Details
+Each model used convolutional neural nets as the encoders (g,
+r, h, and s) and a deconvolutional neural net as the decoder
+(f). Each encoder had three convolution layers with 64 ﬁl-
+ters (kernel 5 ×5; stride 2; padding 2) followed by two fully
+connected layers (64 intermediate and 2 or 3 output units for
+g and r; 100 intermediate and 100 units for h and s). The
+decoder f had two fully connected layers (102 or 103 output
+and 128 intermediate units) followed by three transposed con-
+volutional layers with 64 ﬁlters (kernel 6 ×6; upsampling 2;
+cropping 2). An RELU layer was inserted between convo-
+lutional or fully connected layers; the encoders rand shad
+an additional nonlinearity layer after the top layer to ensure
+positivity: F(a) = exp(a/2). Only for an MLV AE model, we
+let the deep net sencode the precision instead of the variance.
+
+--- PAGE 8 ---
+References
+[Bouchacourt et al., 2018] Diane Bouchacourt, Ryota
+Tomioka, and Sebastian Nowozin. Multi-Level Variational
+Autoencoder: Learning Disentangled Representations from
+Grouped Observations. In AAAI Conference on Artiﬁcial
+Intelligence, 2018.
+[Chen et al., 2016] Xi Chen, Yan Duan, Rein Houthooft, John
+Schulman, Ilya Sutskever, and Pieter Abbeel. InfoGAN -
+Interpretable Representation Learning by Information Max-
+imizing Generative Adversarial Nets. Advances in neural
+information processing systems, 2016.
+[Chen et al., 2018] Micka¨el Chen, Ludovic Denoyer, and
+Thierry Arti `eres. Multi-View Data Generation Without
+View Supervision. In International Conference on Learn-
+ing Representations, November 2018.
+[Cheung et al., 2014] Brian Cheung, Jesse A Livezey, Ar-
+jun K Bansal, and Bruno A Olshausen. Discovering Hidden
+Factors of Variation in Deep Networks. In International
+Conference on Learning Representations, Workshop, De-
+cember 2014.
+[Denton and Birodkar, 2017] Emily Denton and Vighnesh
+Birodkar. Unsupervised Learning of Disentangled Rep-
+resentations from Video. Advances in neural information
+processing systems, May 2017.
+[Dosovitskiy and Springenberg, 2015] A Dosovitskiy and
+J Tobias Springenberg. Learning to generate chairs with
+convolutional neural networks. Computer Vision and Pat-
+tern Recognition, 2015.
+[El Shafey et al., 2013] Laurent El Shafey, Chris McCool,
+Roy Wallace, and S ´ebastien Marcel. A scalable formu-
+lation of probabilistic linear discriminant analysis: applied
+to face recognition. IEEE Transactions on Pattern Analysis
+and Machine Intelligence, 35(7):1788–1794, July 2013.
+[F¨oldi´ak, 1991] P F ¨oldi´ak. Learning invariance from trans-
+formation sequences. Neural Computation, 3(2):194–200,
+1991.
+[Goodfellow et al., 2014] I Goodfellow, J Pouget-Abadie,
+and M Mirza. Generative adversarial nets. Advances in
+neural information processing systems, 2014.
+[Gross et al., 2010] Ralph Gross, Iain Matthews, Jeff Cohn,
+Takeo Kanade, and Simon Baker. Multi-PIE. Proceedings
+of the International Conference on Automatic Face and
+Gesture Recognition. IEEE International Conference on
+Automatic Face & Gesture Recognition , 28(5):807–813,
+May 2010.
+[Higgins et al., 2016] Irina Higgins, Loic Matthey, Arka Pal,
+Christopher Burgess, Xavier Glorot, Matthew Botvinick,
+Shakir Mohamed, and Alexander Lerchner. beta-V AE:
+Learning Basic Visual Concepts with a Constrained Varia-
+tional Framework. InInternational Conference on Learning
+Representations, November 2016.
+[Hosoya and Hyv¨arinen, 2016] H Hosoya and A Hyv¨arinen.
+Learning Visual Spatial Pooling by Strong PCA Dimension
+Reduction. Neural Computation, 28:1249–1263, 2016.
+[Hosoya and Hyv¨arinen, 2017] Haruo Hosoya and Aapo
+Hyv¨arinen. A mixture of sparse coding models explaining
+properties of face neurons related to holistic and parts-based
+processing. PLoS Computational Biology, 13(7):e1005667,
+July 2017.
+[Kingma and Ba, 2015] D Kingma and J Ba. Adam: A
+method for stochastic optimization. In International Con-
+ference on Learning Representations, 2015.
+[Kingma and Welling, 2014] D P Kingma and M Welling.
+Auto-encoding variational bayes. In International Con-
+ference on Learning Representations, 2014.
+[Kingma et al., 2014] D P Kingma, S Mohamed, and D J
+Rezende. Semi-supervised learning with deep generative
+models. Advances in neural information processing sys-
+tems, 2014.
+[Lample et al., 2017] Guillaume Lample, Neil Zeghidour,
+Nicolas Usunier, Antoine Bordes, Ludovic Denoyer, and
+Marc’Aurelio Ranzato. Fader Networks:Manipulating Im-
+ages by Sliding Attributes. Advances in neural information
+processing systems, pages 5967–5976, 2017.
+[LeCun et al., 2004] Yann LeCun, Fu Jie Huang, and L ´eon
+Bottou. Learning Methods for Generic Object Recognition
+with Invariance to Pose and Lighting. Computer Vision and
+Pattern Recognition, 2004.
+[Mathieu et al., 2016] Micha¨el Mathieu, Junbo Jake Zhao,
+Pablo Sprechmann, Aditya Ramesh, and Yann LeCun. Dis-
+entangling factors of variation in deep representation using
+adversarial training. Advances in neural information pro-
+cessing systems, 2016.
+[Reed et al., 2015] Scott E Reed, Yi Zhang, Yuting Zhang,
+and Honglak Lee. Deep Visual Analogy-Making.Advances
+in neural information processing systems, 2015.
+[Sch¨uldt et al., 2004] Christian Sch¨uldt, Ivan Laptev, and Bar-
+bara Caputo. Recognizing Human Actions - A Local SVM
+Approach. In International Conference on Pattern Recog-
+nition, pages 32–36 V ol.3. IEEE, 2004.
+[Siddharth et al., 2017] N Siddharth, Brooks Paige, Jan-
+Willem van de Meent, Alban Desmaison, Frank Wood,
+Noah D Goodman, Pushmeet Kohli, and Philip H S
+Torr. Learning Disentangled Representations with Semi-
+Supervised Deep Generative Models. Advances in neural
+information processing systems, 2017.
+[Tenenbaum and Freeman, 2000] J B Tenenbaum and W T
+Freeman. Separating style and content with bilinear models.
+Neural Computation, 12(6):1247–1283, June 2000.
+[Wang et al., 2017] Chaoyue Wang, Chaohui Wang, Chang
+Xu, and Dacheng Tao. Tag Disentangled Generative Adver-
+sarial Networks for Object Image Re-rendering. Interna-
+tional Joint Conference on Artiﬁcial Intelligence, August
+2017.
+[Yang et al., 2015] Jimei Yang, Scott Reed, Ming-Hsuan
+Yang, and Honglak Lee. Weakly-supervised Disentangling
+with Recurrent Transformations for 3D View Synthesis.
+Advances in neural information processing systems, 2015.
+

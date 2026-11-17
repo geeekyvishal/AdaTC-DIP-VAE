@@ -1,0 +1,309 @@
+--- Page 1 ---
+Isolating Sources of Disentanglement in V AEs
+Ricky T. Q. Chen, Xuechen Li, Roger Grosse, David Duvenaud
+University of Toronto, Vector Institute
+rtqichen, lxuechen, rgrosse, duvenaud@cs.toronto.edu
+Abstract
+We decompose the evidence lower bound to show the existence of a term measuring
+the total correlation between latent variables. We use this to motivate theβ-TCV AE
+(Total Correlation Variational Autoencoder) algorithm, a reﬁnement and plug-in
+replacement of the β-V AE for learning disentangled representations, requiring
+no additional hyperparameters during training. We further propose a principled
+classiﬁer-free measure of disentanglement called the mutual information gap (MIG).
+We perform extensive quantitative and qualitative experiments, in both restricted
+and non-restricted settings, and show a strong relation between total correlation
+and disentanglement, when the model is trained using our framework.
+1 Introduction
+Learning disentangled representations without supervision is a difﬁcult open problem. Disentangled
+variables are generally considered to contain interpretable semantic information and reﬂect separate
+factors of variation in the data. While the deﬁnition of disentanglement is open to debate, many
+believe a factorial representation, one with statistically independent variables, is a good starting
+point [1, 2, 3]. Such representations distill information into a compact form which is oftentimes
+semantically meaningful and useful for a variety of tasks [2, 4]. For instance, it is found that such
+representations are more generalizable and robust against adversarial attacks [5].
+Many state-of-the-art methods for learning disentangled representations are based on re-weighting
+parts of an existing objective. For instance, it is claimed that mutual information between latent
+variables and the observed data can encourage the latents into becoming more interpretable [6]. It
+is also argued that encouraging independence between latent variables induces disentanglement
+[7]. However, there is no strong evidence linking factorial representations to disentanglement. In
+part, this can be attributed to weak qualitative evaluation procedures. While traversals in the latent
+representation can qualitatively illustrate disentanglement, quantitative measures of disentanglement
+are in their infancy.
+In this paper, we:
+• show a decomposition of the variational lower bound that can be used to explain the success
+of the β-V AE [7] in learning disentangled representations.
+• propose a simple method based on weighted minibatches to stochastically train with arbitrary
+weights on the terms of our decomposition without any additional hyperparameters.
+• introduce the β-TCV AE, which can be used as a plug-in replacement for theβ-V AE with no
+extra hyperparameters. Empirical evaluations suggest that the β-TCV AE discovers more
+interpretable representations than existing methods, while also being fairly robust to random
+initialization.
+• propose a new information-theoretic disentanglement metric, which is classiﬁer-free and
+generalizable to arbitrarily-distributed and non-scalar latent variables.
+32nd Conference on Neural Information Processing Systems (NeurIPS 2018), Montréal, Canada.
+arXiv:1802.04942v5  [cs.LG]  23 Apr 2019--- Page 2 ---
+β-V AE [7]
+β-TCV AE (Our)
+(a) Baldness (-6, 6)
+ (b) Face width (0, 6)
+ (c) Gender (-6, 6)
+ (d) Mustache (-6, 0)
+Figure 1: Qualitative comparisons on CelebA. Traversal ranges are shown in parentheses. Some
+attributes are only manifested in one direction of a latent variable, so we show a one-sided traversal.
+Most semantically similar variables from a β-V AE are shown for comparison.
+While Kim & Mnih [ 8] have independently proposed augmenting V AEs with an equivalent total
+correlation penalty to the β-TCV AE, their proposed training method differs from ours and requires
+an auxiliary discriminator network.
+2 Background: Learning and Evaluating Disentangled Representations
+We discuss existing work that aims at either learning disentangled representations without supervision
+or evaluating such representations. The two problems are inherently related, since improvements
+to learning algorithms require evaluation metrics that are sensitive to subtle details, and stronger
+evaluation metrics reveal deﬁciencies in existing methods.
+2.1 Learning Disentangled Representations
+V AE andβ-V AE The variational autoencoder (V AE) [9, 10] is a latent variable model that pairs a
+top-down generator with a bottom-up inference network. Instead of directly performing maximum
+likelihood estimation on the intractable marginal log-likelihood, training is done by optimizing the
+tractable evidence lower bound (ELBO). We would like to optimize this lower bound averaged over
+the empirical distribution (with β = 1):
+Lβ = 1
+N
+N∑
+n=1
+(Eq[log p(xn|z)] −β KL (q(z|xn)||p(z))) (1)
+The β-V AE [7] is a variant of the variational autoencoder that attempts to learn a disentangled
+representation by optimizing a heavily penalized objective with β > 1. Such simple penalization
+has been shown to be capable of obtaining models with a high degree of disentanglement in image
+datasets. However, it is not made explicit why penalizing KL(q(z|x)||p(z)) with a factorial prior can
+lead to learning latent variables that exhibit disentangled transformations for all data samples.
+InfoGAN The InfoGAN [6] is a variant of the generative adversarial network (GAN) [ 11] that
+encourages an interpretable latent representation by maximizing the mutual information between the
+observation and a small subset of latent variables. The approach relies on optimizing a lower bound
+of the intractable mutual information.
+2.2 Evaluating Disentangled Representations
+When the true underlying generative factors are known and we have reason to believe that this
+set of factors is disentangled, it is possible to create a supervised evaluation metric. Many have
+proposed classiﬁer-based metrics for assessing the quality of disentanglement [7, 8, 12, 13, 14, 15].
+2--- Page 3 ---
+We focus on discussing the metrics proposed in [7] and [8], as they are relatively simple in design
+and generalizable.
+The Higgins’ metric [7] is deﬁned as the accuracy that a low VC-dimension linear classiﬁer can
+achieve at identifying a ﬁxed ground truth factor. Speciﬁcally, for a set of ground truth factors
+{vk}K
+k=1, each training data point is an aggregation over Lsamples: 1
+L
+∑L
+l=1 |z(1)
+l −z(2)
+l |, where
+random vectors z(1)
+l ,z(2)
+l are drawn i.i.d. from q(z|vk)1 for any ﬁxed value of vk, and a classiﬁcation
+target k. A drawback of this method is the lack of axis-alignment detection. That is, we believe a truly
+disentangled model should only contain one latent variable that is related to each factor. As a means
+to include axis-alignment detection, [8] proposes using argminjVarq(zj|vk)[zj] and a majority-vote
+classiﬁer.
+Classiﬁer-based disentanglement metrics tend to be ad-hoc and sensitive to hyperparameters. The
+metrics in [ 7] and [ 8] can be loosely interpreted as measuring the reduction in entropy of z if v
+is observed. In section 4, we show that it is possible to directly measure the mutual information
+between zand vwhich is a principled information-theoretic quantity that can be used for any latent
+distributions provided that efﬁcient estimation exists.
+3 Sources of Disentanglement in the ELBO
+It is suggested that two quantities are especially important in learning a disentangled representation
+[6, 7]: A) Mutual information between the latent variables and the data variable, and B) Independence
+between the latent variables.
+A term that quantiﬁes criterion A was illustrated by an ELBO decomposition [16]. In this section, we
+introduce a reﬁned decomposition showing that terms describing both criteria appear in the ELBO.
+ELBO TC-Decomposition We identify each training example with a unique integer index and
+deﬁne a uniform random variable on {1,2,...,N }with which we relate to data points. Fur-
+thermore, we deﬁne q(z|n) = q(z|xn) and q(z,n) = q(z|n)p(n) = q(z|n) 1
+N. We refer to
+q(z) =∑N
+n=1 q(z|n)p(n) as the aggregated posterior following [17], which captures the aggregate
+structure of the latent variables under the data distribution. With this notation, we decompose the KL
+term in (1) assuming a factorized p(z).
+Ep(n)
+[
+KL
+(
+q(z|n)||p(z)
+)]
+= KL (q(z,n)||q(z)p(n))  
+i Index-Code MI
++ KL
+(
+q(z)||
+∏
+j
+q(zj)
+)
+  
+ii Total Correlation
++
+∑
+j
+KL (q(zj)||p(zj))
+  
+iii Dimension-wise KL
+(2)
+where zj denotes the jth dimension of the latent variable.
+Decomposition Analysis In a similar decomposition [ 16], i is referred to as the index-code
+mutual information (MI). The index-code MI is the mutual information Iq(z; n) between the data
+variable and latent variable based on the empirical data distribution q(z,n). It is argued that a
+higher mutual information can lead to better disentanglement [6], and some have even proposed to
+completely drop the penalty on this term during optimization [17, 18]. However, recent investigations
+into generative modeling also claim that a penalized mutual information through the information
+bottleneck encourages compact and disentangled representations [3, 19].
+In information theory, ii is referred to as the total correlation (TC), one of many generalizations
+of mutual information to more than two random variables [20]. The naming is unfortunate as it is
+actually a measure of dependence between the variables. The penalty on TC forces the model to ﬁnd
+statistically independent factors in the data distribution. We claim that a heavier penalty on this term
+induces a more disentangled representation, and that the existence of this term is the reason β-V AE
+has been successful.
+1Note that q(z|vk) is sampled by using an intermediate data sample: z∼q(z|x),x ∼p(x|vk).
+3--- Page 4 ---
+We refer to iii as the dimension-wise KL. This term mainly prevents individual latent dimensions
+from deviating too far from their corresponding priors. It acts as a complexity penalty on the aggregate
+posterior which reasonably follows from the minimum description length [ 21] formulation of the
+ELBO.
+We would like to verify the claim that TC is the most important term in this decomposition for
+learning disentangled representations by penalizing only this term; however, it is difﬁcult to estimate
+the three terms in the decomposition. In the following section, we propose a simple yet general
+framework for training with the TC-decomposition using minibatches of data.
+A special case of this decomposition was given in [22], assuming that the use of a ﬂexible prior can
+effectively ignore the dimension-wise KL term. In contrast, our decomposition (2) is more generally
+applicable to many applications of the ELBO.
+3.1 Training with Minibatch-Weighted Sampling
+We describe a method to stochastically estimate the decomposition terms, allowing scalable training
+with arbitrary weights on each decomposition term. Note that the decomposed expression(2) requires
+the evaluation of the density q(z) =Ep(n)[q(z|n)], which depends on the entire dataset2. As such, it
+is undesirable to compute it exactly during training. One main advantage of our stochastic estimation
+method is the lack of hyperparameters or inner optimization loops, which should provide more stable
+training.
+A naïve Monte Carlo approximation based on a minibatch of samples from p(n) is likely to underes-
+timate q(z). This can be intuitively seen by viewing q(z) as a mixture distribution where the data
+index nindicates the mixture component. With a randomly sampled component, q(z|n) is close to 0,
+whereas q(z|n) would be large if nis the component that zcame from. So it is much better to sample
+this component and weight the probability appropriately.
+To this end, we propose using a weighted version for estimating the function log q(z) during training,
+inspired by importance sampling. When provided with a minibatch of samples {n1,...,n M}, we can
+use the estimator
+Eq(z)[log q(z)] ≈ 1
+M
+M∑
+i=1
+
+log 1
+NM
+M∑
+j=1
+q(z(ni)|nj)
+
+ (3)
+where z(ni) is a sample from q(z|ni) (see derivation in Appendix C). This minibatch estimator is
+biased, since its expectation is a lower bound3. However, computing it does not require any additional
+hyperparameters.
+3.1.1 Special case: β-TCV AE
+With minibatch-weighted sampling, it is easy to assign different weights (α,β,γ ) to the terms in (2):
+Lβ−TC := Eq(z|n)p(n)[log p(n|z)] −αIq(z; n) −β KL
+(
+q(z)||
+∏
+j
+q(zj)
+)
+−γ
+∑
+j
+KL (q(zj)||p(zj))
+(4)
+While we performed ablation experiments with different values for αand γ, we ultimately ﬁnd that
+tuning βleads to the best results. Our proposed β-TCV AE usesα= γ = 1and only modiﬁes the
+hyperparameter β. While Kim & Mnih [8] have proposed an equivalent objective, they estimate TC
+using an auxiliary discriminator network.
+4 Measuring Disentanglement with the Mutual Information Gap
+It is difﬁcult to compare disentangling algorithms without a proper metric. Most prior work has
+resorted to qualitative analysis by visualizing the latent representation. Another approach relies
+on knowing the true generative process p(n|v) and ground truth latent factors v. Often these are
+2The same argument holds for the term ∏
+j q(zj) and a similar estimator can be constructed.
+3This follows from Jensen’s inequalityEp(n)[log q(z|n)] ≤log Ep(n)[q(z|n)].
+4--- Page 5 ---
+semantically meaningful attributes of the data. For instance, photographic portraits generally contain
+disentangled factors such as pose (azimuth and elevation), lighting condition, and attributes of the
+face such as skin tone, gender, face width, etc. Though not all ground truth factors may be provided,
+it is still possible to evaluate disentanglement using the known factors. We propose a metric based on
+the empirical mutual information between latent variables and ground truth factors.
+4.1 Mutual Information Gap (MIG)
+Our key insight is that the empirical mutual information between a latent variable zj and a
+ground truth factor vk can be estimated using the joint distribution deﬁned by q(zj,vk) =∑N
+n=1 p(vk)p(n|vk)q(zj|n). Assuming that the underlying factors p(vk) and the generating process
+is known for the empirical data samples p(n|vk), then
+In(zj; vk) =Eq(zj,vk)
+
+log
+∑
+n∈Xvk
+q(zj|n)p(n|vk)
+
++ H(zj) (5)
+where Xvk is the support of p(n|vk). (See derivation in Appendix B.)
+A higher mutual information implies that zj contains a lot of information about vk, and the mutual
+information is maximal if there exists a deterministic, invertible relationship between zj and vj.
+Furthermore, for discrete vk, 0 ≤I(zj; vk) ≤H(vk), where H(vk) = Ep(vk)[−log p(vk)] is the
+entropy of vk. As such, we use the normalized mutual information I(zj; vk)/H(vk).
+Note that a single factor can have high mutual information with multiple latent variables. We enforce
+axis-alignment by measuring the difference between the top two latent variables with highest mutual
+information. The full metric we call mutual information gap (MIG) is then
+1
+K
+K∑
+k=1
+1
+H(vk)
+(
+In(zj(k) ; vk) −max
+j̸=j(k)
+In(zj; vk)
+)
+(6)
+where j(k) = argmaxjIn(zj; vk) and Kis the number of known factors. MIG is bounded by 0 and 1.
+We perform an entire pass through the dataset to estimate MIG.
+While it is possible to compute just the average maximal MI, 1
+K
+∑K
+k=1
+In(zk∗;vk)
+H(vk) , the gap in our
+formulation (6) defends against two important cases. The ﬁrst case is related to rotation of the factors.
+When a set of latent variables are not axis-aligned, each variable can contain a decent amount of
+information regarding two or more factors. The gap heavily penalizes unaligned variables, which is
+an indication of entanglement. The second case is related to compactness of the representation. If one
+latent variable reliably models a ground truth factor, then it is unnecessary for other latent variables
+to also be informative about this factor.
+Metric Axis Unbiased General
+Higgins et al. [7] No No No
+Kim & Mnih [8] Yes No No
+MIG (Ours) Yes Yes Yes
+Table 1: In comparison to prior metrics, our proposed
+MIG detects axis-alignment, is unbiased for all hyper-
+parameter settings, and can be generally applied to any
+latent distributions provided efﬁcient estimation exists.
+As summarized in Table 1, our metric de-
+tects axis-alignment and is generally appli-
+cable and meaningful for any factorized la-
+tent distribution, including vectors of mul-
+timodal, categorical, and other structured
+distributions. This is because the metric is
+only limited by whether the mutual informa-
+tion can be estimated. Efﬁcient estimation of
+mutual information is an ongoing research
+topic [23, 24], but we ﬁnd that the simple
+estimator (5) can be computed within rea-
+sonable amount of time for the datasets we
+use. We ﬁnd that MIG can better capture
+subtle differences in models compared to existing metrics. Systematic experiments analyzing MIG
+and existing metrics are in Appendix G.
+5 Related Work
+We focus on discussing the learning of disentangled representations in an unsupervised manner.
+Nevertheless, we note that inverting generative processes with known disentangled factors through
+5

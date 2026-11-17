@@ -1,0 +1,1651 @@
+--- PAGE 1 ---
+Disentangling by Factorising
+Hyunjik Kim1 2 Andriy Mnih1
+Abstract
+We deﬁne and address the problem of unsuper-
+vised learning of disentangled representations on
+data generated from independent factors of varia-
+tion. We propose FactorV AE, a method that dis-
+entangles by encouraging the distribution of rep-
+resentations to be factorial and hence independent
+across the dimensions. We show that it improves
+upon β-V AE by providing a better trade-off be-
+tween disentanglement and reconstruction quality.
+Moreover, we highlight the problems of a com-
+monly used disentanglement metric and introduce
+a new metric that does not suffer from them.
+1. Introduction
+Learning interpretable representations of data that expose
+semantic meaning has important consequences for artiﬁcial
+intelligence. Such representations are useful not only for
+standard downstream tasks such as supervised learning and
+reinforcement learning, but also for tasks such as transfer
+learning and zero-shot learning where humans excel but
+machines struggle (Lake et al., 2016). There have been
+multiple efforts in the deep learning community towards
+learning factors of variation in the data, commonly referred
+to as learning a disentangled representation. While there is
+no canonical deﬁnition for this term, we adopt the one due
+to Bengio et al. (2013): a representation where a change
+in one dimension corresponds to a change in one factor
+of variation, while being relatively invariant to changes in
+other factors. In particular, we assume that the data has
+been generated from a ﬁxed number of independent factors
+of variation.3 We focus on image data, where the effect of
+factors of variation is easy to visualise.
+Using generative models has shown great promise in learn-
+ing disentangled representations in images. Notably, semi-
+1DeepMind, UK 2Department of Statistics, University
+of Oxford. Correspondence to: Hyunjik Kim <hyun-
+jikk@google.com>.
+Proceedings of the 35 th International Conference on Machine
+Learning, Stockholm, Sweden, PMLR 80, 2018. Copyright 2018
+by the author(s).
+3We discuss the limitations of this assumption in Section 4.
+Cross-entropy loss
+for classifying samples
+from each class
+ - encouraging        to 
+   be factorised
+randomly permute 
+each dimension
+across batch
+VAE
+-
++
+Discriminator
+Input
+FactorVAE objective = VAE objective -       cross-entropy loss
+Figure 1.Architecture of FactorV AE, a Variational Autoencoder
+(V AE) that encourages the code distribution to be factorial. The
+top row is a V AE with convolutional encoder and decoder, and
+the bottom row is an MLP classiﬁer, the discriminator, that dis-
+tinguishes whether the input was drawn from the marginal code
+distribution or the product of its marginals.
+supervised approaches that require implicit or explicit
+knowledge about the true underlying factors of the data have
+excelled at disentangling (Kulkarni et al., 2015; Kingma
+et al., 2014; Reed et al., 2014; Siddharth et al., 2017; Hinton
+et al., 2011; Mathieu et al., 2016; Goroshin et al., 2015; Hsu
+et al., 2017; Denton & Birodkar, 2017). However, ideally
+we would like to learn these in an unsupervised manner, due
+to the following reasons: 1. Humans are able to learn factors
+of variation unsupervised (Perry et al., 2010). 2. Labels are
+costly as obtaining them requires a human in the loop. 3.
+Labels assigned by humans might be inconsistent or leave
+out the factors that are difﬁcult for humans to identify.
+β-V AE (Higgins et al., 2016) is a popular method for un-
+supervised disentangling based on the Variational Autoen-
+coder (V AE) framework (Kingma & Welling, 2014; Rezende
+et al., 2014) for generative modelling. It uses a modiﬁed ver-
+sion of the V AE objective with a larger weight (β >1) on
+the KL divergence between the variational posterior and the
+prior, and has proven to be an effective and stable method
+for disentangling. One drawback of β-V AE is that recon-
+struction quality (compared to V AE) must be sacriﬁced
+in order to obtain better disentangling. The goal of our
+work is to obtain a better trade-off between disentanglement
+and reconstruction, allowing to achieve better disentangle-
+ment without degrading reconstruction quality. In this work,
+we analyse the source of this trade-off and propose Factor-
+V AE, which augments the V AE objective with a penalty that
+arXiv:1802.05983v3  [stat.ML]  9 Jul 2019
+
+--- PAGE 2 ---
+Disentangling by Factorising
+encourages the marginal distribution of representations to
+be factorial without substantially affecting the quality of
+reconstructions. This penalty is expressed as a KL diver-
+gence between this marginal distribution and the product
+of its marginals, and is optimised using a discriminator net-
+work following the divergence minimisation view of GANs
+(Nowozin et al., 2016; Mohamed & Lakshminarayanan,
+2016). Our experimental results show that this approach
+achieves better disentanglement than β-V AE for the same
+reconstruction quality. We also point out the weaknesses
+in the disentangling metric of Higgins et al. (2016), and
+propose a new metric that addresses these shortcomings.
+A popular alternative to β-V AE is InfoGAN (Chen et al.,
+2016), which is based on the Generative Adversarial Net
+(GAN) framework (Goodfellow et al., 2014) for generative
+modelling. InfoGAN learns disentangled representations by
+rewarding the mutual information between the observations
+and a subset of latents. However at least in part due to its
+training stability issues (Higgins et al., 2016), there has been
+little empirical comparison between V AE-based methods
+and InfoGAN. Taking advantage of the recent developments
+in the GAN literature that help stabilise training, we include
+InfoWGAN-GP, a version of InfoGAN that uses Wasser-
+stein distance (Arjovsky et al., 2017) and gradient penalty
+(Gulrajani et al., 2017), in our experimental evaluation.
+In summary, we make the following contributions: 1) We
+introduce FactorV AE, a method for disentangling that gives
+higher disentanglement scores than β-V AE for the same
+reconstruction quality. 2) We identify the weaknesses of
+the disentanglement metric of Higgins et al. (2016) and
+propose a more robust alternative. 3) We give quantitative
+comparisons of FactorV AE andβ-V AE against InfoGAN’s
+WGAN-GP counterpart for disentanglement.
+2. Trade-off between Disentanglement and
+Reconstruction inβ-V AE
+We motivate our approach by analysing where the disen-
+tanglement and reconstruction trade-off arises in the β-
+V AE objective. First, we introduce notation and archi-
+tecture of our V AE framework. We assume that observa-
+tions x(i) ∈X,i = 1,...,N are generated by combining
+K underlying factors f = ( f1,...,f K). These observa-
+tions are modelled using a real-valued latent/code vector
+z ∈Rd, interpreted as the representation of the data. The
+generative model is deﬁned by the standard Gaussian prior
+p(z) = N(0,I), intentionally chosen to be a factorised
+distribution, and the decoder pθ(x|z) parameterised by a
+neural net. The variational posterior for an observation is
+qθ(z|x) = ∏d
+j=1 N(zj|µj(x),σ2
+j(x)), with the mean and
+variance produced by the encoder, also parameterised by
+a neural net.1 The variational posterior can be seen as the
+distribution of the representation corresponding to the data
+point x. The distribution of representations for the entire
+data set is then given by
+q(z) = Epdata(x)[q(z|x)] = 1
+N
+N∑
+i=1
+q(z|x(i)), (1)
+which is known as the marginal posterior or aggregate pos-
+terior, where pdata is the empirical data distribution. A
+disentangled representation would have each zj correspond
+to precisely one underlying factor fk. Since we assume that
+these factors vary independently, we wish for a factorial
+distribution q(z) = ∏d
+j=1 q(zj).
+The β-V AE objective
+1
+N
+N∑
+i=1
+[
+Eq(z|x(i))[log p(x(i)|z)] −βKL(q(z|x(i))||p(z))
+]
+is a variational lower bound on Epdata(x)[log p(x(i))] for
+β ≥1, reducing to the V AE objective forβ = 1. Its ﬁrst
+term can be interpreted as the negative reconstruction error,
+and the second term as the complexity penalty that acts as
+a regulariser. We may further break down this KL term as
+(Hoffman & Johnson, 2016; Makhzani & Frey, 2017)
+Epdata(x)[KL(q(z|x)||p(z))] = I(x; z)+ KL(q(z)||p(z)),
+where I(x; z) is the mutual information between xand zun-
+der the joint distribution pdata(x)q(z|x). See Appendix C
+for the derivation. Penalising the KL(q(z)||p(z)) term
+pushes q(z) towards the factorial prior p(z), encouraging
+independence in the dimensions of zand thus disentangling.
+Penalising I(x; z), on the other hand, reduces the amount of
+information about xstored in z, which can lead to poor re-
+constructions for high values of β(Makhzani & Frey, 2017).
+Thus making βlarger than 1, penalising both terms more,
+leads to better disentanglement but reduces reconstruction
+quality. When this reduction is severe, there is insufﬁcient
+information about the observation in the latents, making it
+impossible to recover the true factors. Therefore there exists
+a value of β >1 that gives highest disentanglement, but
+results in a higher reconstruction error than a V AE.
+3. Total Correlation Penalty and FactorV AE
+Penalising I(x; z) more than a V AE does might be neither
+necessary nor desirable for disentangling. For example,
+InfoGAN disentangles by encouraging I(x; c) to be high
+where cis a subset of the latent variables z 2. Hence we
+1In the rest of the paper we will omit the dependence of pand
+qon their parameters θfor notational convenience.
+2Note however that I(x; z) in β-V AE is deﬁned under the joint
+distribution of data and their encoding distributionpdata(x)q(z|x),
+whereas I(x; c) in InfoGAN is deﬁned on the joint distribution of
+the prior on cand the decoding distribution p(c)p(x|c).
+
+--- PAGE 3 ---
+Disentangling by Factorising
+motivate FactorV AE by augmenting the V AE objective with
+a term that directly encourages independence in the code
+distribution, arriving at the following objective:
+1
+N
+N∑
+i=1
+[
+Eq(z|x(i))[log p(x(i)|z)] −KL(q(z|x(i))||p(z))
+]
+−γKL(q(z)||¯q(z)), (2)
+where ¯q(z) := ∏d
+j=1 q(zj). Note that this is also a lower
+bound on the marginal log likelihood Epdata(x)[log p(x)].
+KL(q(z)||¯q(z)) is known as Total Correlation (TC, Watan-
+abe, 1960), a popular measure of dependence for multiple
+random variables. In our case this term is intractable since
+both q(z) and ¯q(z) involve mixtures with a large number of
+components, and the direct Monte Carlo estimate requires a
+pass through the entire data set for each q(z) evaluation.3.
+Hence we take an alternative approach for optimizing this
+term. We start by observing we can sample from q(z) efﬁ-
+ciently by ﬁrst choosing a datapoint x(i) uniformly at ran-
+dom and then sampling from q(z|x(i)). We can also sample
+from ¯q(z) by generating dsamples from q(z) and then ig-
+noring all but one dimension for each sample. A more
+efﬁcient alternative involves sampling a batch from q(z)
+and then randomly permuting across the batch for each la-
+tent dimension (see Alg. 1). This is a standard trick used in
+the independence testing literature (Arcones & Gine, 1992)
+and as long as the batch is large enough, the distribution of
+these samples samples will closely approximate ¯q(z).
+Having access to samples from both distributions allows
+us to minimise their KL divergence using the density-ratio
+trick (Nguyen et al., 2010; Sugiyama et al., 2012) which
+involves training a classiﬁer/discriminator to approximate
+the density ratio that arises in the KL term. Suppose we
+have a discriminator D(in our case an MLP) that outputs
+an estimate of the probability D(z) that its input is a sample
+from q(z) rather than from ¯q(z). Then we have
+TC(z) = KL(q(z)||¯q(z)) = Eq(z)
+[
+log q(z)
+¯q(z)
+]
+≈Eq(z)
+[
+log D(z)
+1 −D(z)
+]
+. (3)
+We train the discriminator and the V AE jointly. In particu-
+lar, the V AE parameters are updated using the objective in
+Eqn. (2), with the TC term replaced using the discriminator-
+based approximation from Eqn. (3). The discriminator is
+trained to classify between samples from q(z) and ¯q(z),
+thus learning to approximate the density ratio needed for
+estimating TC. See Alg. 2 for pseudocode of FactorV AE.
+It is important to note that low TC is necessary but not
+sufﬁcient for meaningful disentangling. For example, when
+3We have also tried using a batch estimate of q(z), but this did
+not work. See Appendix D for details.
+Algorithm 1permute dims
+Input: {z(i) ∈Rd : i= 1,...,B }
+for j = 1 to ddo
+π←random permutation on {1,...,B }
+(z(i)
+j )B
+i=1 ←(z(π(i))
+j )B
+i=1
+end for
+Output: {z(i) : i= 1,...,B }
+Algorithm 2FactorV AE
+Input: observations (x(i))N
+i=1, batch size m, latent di-
+mension d, γ, V AE/Discriminator optimisers:g, gD
+Initialize V AE and discriminator parametersθ,ψ.
+repeat
+Randomly select batch (x(i))i∈Bof size m
+Sample z(i)
+θ ∼qθ(z|x(i)) ∀i∈B
+θ←g(∇θ 1
+m
+∑
+i∈B
+[log pθ(x(i),z(i)
+θ )
+qθ(z(i)
+θ |x(i)) −γlog Dψ(z(i)
+θ )
+1−Dψ(z(i)
+θ ) ])
+Randomly select batch (x(i))i∈B′ of size m
+Sample z′(i)
+θ ∼qθ(z|x(i)) for i∈B′
+(z′(i)
+perm)i∈B′ ←permute dims((z′(i)
+θ )i∈B′ )
+ψ←gD(∇ψ 1
+2m[ ∑
+i∈B
+log(Dψ(z(i)
+θ ))
++ ∑
+i∈B′
+log(1 −Dψ(z′(i)
+perm))])
+until convergence of objective.
+q(z|x) = p(z), TC=0 but zcarries no information about the
+data. Thus having low TC is only meaningful when we can
+preserve information in the latents, which is why controlling
+for reconstruction error is important.
+In the GAN literature, divergence minimisation is usually
+done between two distributions over the data space, which
+is often very high dimensional (e.g. images). As a result, the
+two distributions often have disjoint support, making train-
+ing unstable, especially when the discriminator is strong.
+Hence it is necessary to use tricks to weaken the discrim-
+inator such as instance noise (Sønderby et al., 2016) or to
+replace the discriminator with a critic, as in Wasserstein
+GANs (Arjovsky et al., 2017). In this work, we minimise
+divergence between two distributions over the latent space
+(as in e.g. (Mescheder et al., 2017)), which is typically much
+lower dimensional and the two distributions have overlap-
+ping support. We observe that training is stable for sufﬁ-
+ciently large batch sizes (e.g. 64 worked well for d= 10),
+allowing us to use a strong discriminator.
+4. A New Metric for Disentanglement
+The deﬁnition of disentanglement we use in this paper,
+where a change in one dimension of the representation cor-
+responds to a change in exactly one factor of variation, is
+
+--- PAGE 4 ---
+Disentangling by Factorising
+Generate data with
+fixed    , random
+Get
+representation
+T ake absolute
+value of difference
+T ake mean
+One training point for
+linear classifier
+Generate data with
+fixed    , random
+Get rescaled
+representation
+T ake empirical variance
+in each dimension T ake argmin
+One training point for
+majority-vote classifier
+Fix one factor
+Fix one factor
+Figure 2.Top: Metric in (Higgins et al., 2016). Bottom: Our new
+metric, where s∈Rd is the scale (empirical standard deviation)
+of latent representations of the full data (or large enough random
+subset).
+clearly a simplistic one. It does not allow correlations among
+the factors or hierarchies over them. Thus this deﬁnition
+seems more suited to synthetic data with independent fac-
+tors of variation than to most realistic data sets. However,
+as we will show below, robust disentanglement is not a fully
+solved problem even in this simple setting. One obstacle
+on the way to this ﬁrst milestone is the absence of a sound
+quantitative metric for measuring disentanglement.
+A popular method of measuring disentanglement is by in-
+specting latent traversals: visualising the change in recon-
+structions while traversing one dimension of the latent space
+at a time. Although latent traversals can be a useful indicator
+of when a model has failed to disentangle, the qualitative
+nature of this approach makes it unsuitable for comparing
+algorithms reliably. Doing this would require inspecting
+a multitude of latent traversals over multiple reference im-
+ages, random seeds, and points during training. Having a
+human in the loop to assess the traversals is also too time-
+consuming and subjective. Unfortunately, for data sets that
+do not have the ground truth factors of variation available,
+currently this is the only viable option for assessing disen-
+tanglement.
+Higgins et al. (2016) proposed a supervised metric that at-
+tempts to quantify disentanglement when the ground truth
+factors of a data set are given. The metric is the error rate
+of a linear classiﬁer that is trained as follows. Choose a
+factor k; generate data with this factor ﬁxed but all other
+factors varying randomly; obtain their representations (de-
+ﬁned to be the mean of q(z|x)); take the absolute value of
+the pairwise differences of these representations. Then the
+mean of these statistics across the pairs gives one training
+input for the classiﬁer, and the ﬁxed factor index k is the
+corresponding training output (see top of Figure 2). So if the
+representations were perfectly disentangled, we would see
+zeros in the dimension of the training input that corresponds
+to the ﬁxed factor of variation, and the classiﬁer would learn
+to map the index of the zero value to the index of the factor.
+However this metric has several weaknesses. Firstly, it
+could be sensitive to hyperparameters of the linear classiﬁer
+optimisation, such as the choice of the optimiser and its
+origreconstr
+Figure 3.A β-V AE model trained on the 2D Shapes data that
+scores 100% on metric in Higgins et al. (2016) (ignoring the shape
+factor). First row: originals. Second row: reconstructions. Re-
+maining rows: reconstructions of latent traversals. The model only
+uses three latent units to capture x-position, y-position, scale and
+ignores orientation, yet achieves a perfect score on the metric.
+hyperparameters, weight initialisation, and the number of
+training iterations. Secondly, having a linear classiﬁer is
+not so intuitive – we could get representations where each
+factor corresponds to a linear combination of dimensions
+instead of a single dimension. Finally and most importantly,
+the metric has a failure mode: it gives 100% accuracy even
+when only K−1 factors out of Khave been disentangled;
+to predict the remaining factor, the classiﬁer simply learns
+to detect when all the values corresponding to the K −1
+factors are non-zero. An example of such a case is shown in
+Figure 3.
+To address these weaknesses, we propose a new disentan-
+glement metric as follows. Choose a factor k; generate data
+with this factor ﬁxed but all other factors varying randomly;
+obtain their representations; normalise each dimension by
+its empirical standard deviation over the full data (or a large
+enough random subset); take the empirical variance in each
+dimension4 of these normalised representations. Then the
+index of the dimension with the lowest variance and the
+target index kprovide one training input/output example for
+the classiﬁer (see bottom of Figure 2). Thus if the repre-
+sentation is perfectly disentangled, the empirical variance
+in the dimension corresponding to the ﬁxed factor will be
+0. We normalise the representations so that the arg min
+is invariant to rescaling of the representations in each di-
+mension. Since both inputs and outputs lie in a discrete
+space, the optimal classiﬁer is the majority-vote classiﬁer
+(see Appendix B for details), and the metric is the error rate
+of the classiﬁer. The resulting classiﬁer is a deterministic
+function of the training data, hence there are no optimisation
+hyperparameters to tune. We also believe that this metric
+is conceptually simpler and more natural than the previous
+one. Most importantly, it circumvents the failure mode of
+the earlier metric, since the classiﬁer needs to see the lowest
+variance in a latent dimension for a given factor to classify
+it correctly.
+We think developing a reliable unsupervised disentangling
+metric that does not use the ground truth factors is an im-
+portant direction for future research, since unsupervised
+4We can use Gini’s deﬁnition of variance for discrete latents
+(Gini, 1971). See Appendix B for details.
+
+--- PAGE 5 ---
+Disentangling by Factorising
+disentangling is precisely useful for the scenario where we
+do not have access to the ground truth factors. With this in
+mind, we believe that having a reliable supervised metric is
+still valuable as it can serve as a gold standard for evaluating
+unsupervised metrics.
+5. Related Work
+There are several recent works that use a discriminator to
+optimise a divergence to encourage independence in the
+latent codes. Adversarial Autoencoder (AAE, Makhzani
+et al., 2015) removes the I(x; z) term in the V AE objec-
+tive and maximizes the negative reconstruction error minus
+KL(q(z)||p(z)) via the density-ratio trick, showing appli-
+cations in semi-supervised classiﬁcation and unsupervised
+clustering. This means that the AAE objective is not a lower
+bound on the log marginal likelihood. Although optimising
+a lower bound is not strictly necessary for disentangling, it
+does ensure that we have a valid generative model; having
+a generative model with disentangled latents has the ben-
+eﬁt of being a single model that can be useful for various
+tasks e.g. planning for model-based RL, visual concept
+learning and semi-supervised learning, to name a few. In
+PixelGAN Autoencoders (Makhzani & Frey, 2017), the
+same objective is used to study the decomposition of in-
+formation between the latent code and the decoder. The
+authors state that adding noise to the inputs of the encoder
+is crucial, which suggests that limiting the information that
+the code contains about the input is essential and that the
+I(x; z) term should not be dropped from the V AE objective.
+Brakel & Bengio (2017) also use a discriminator to penalise
+the Jensen-Shannon Divergence between the distribution of
+codes and the product of its marginals. However, they use
+the GAN loss with deterministic encoders and decoders and
+only explore their technique in the context of Independent
+Component Analysis source separation.
+Early works on unsupervised disentangling include (Schmid-
+huber, 1992) which attempts to disentangle codes in an au-
+toencoder by penalising predictability of one latent dimen-
+sion given the others and (Desjardins et al., 2012) where a
+variant of a Boltzmann Machine is used to disentangle two
+factors of variation in the data. More recently, Achille &
+Soatto (2018) have used a loss function that penalises TC
+in the context of supervised learning. They show that their
+approach can be extended to the V AE setting, but do not
+perform any experiments on disentangling to support the the-
+ory. In a concurrent work, Kumar et al. (2018) used moment
+matching in V AEs to penalise the covariance between the
+latent dimensions, but did not constrain the mean or higher
+moments. We provide the objectives used in these related
+methods and show experimental results on disentangling
+performance, including AAE, in Appendix F.
+There have been various works that use the notion of pre-
+dictability to quantify disentanglement, mostly predicting
+the value of ground truth factors f = (f1,...,f K) from
+the latent code z. This dates back to Yang & Amari (1997)
+who learn a linear map from representations to factors in the
+context of linear ICA, and quantify how close this map is to
+a permutation matrix. More recently Eastwood & Williams
+(2018) have extended this idea to disentanglement by train-
+ing a Lasso regressor to map z to f and using its trained
+weights to quantify disentanglement. Like other regression-
+based approaches, this one introduces hyperparameters such
+as the optimiser and the Lasso penalty coefﬁcient. The met-
+ric of Higgins et al. (2016) as well as the one we proposed,
+predict the factor k from the z of images with a ﬁxed fk
+but f−k varying randomly. Schmidhuber (1992) quantiﬁes
+predictability between the different dimensions of z, using
+a predictor that is trained to predict zj from z−j.
+Invariance and equivariance are frequently considered to
+be desirable properties of representations in the literature
+(Goodfellow et al., 2009; Kivinen & Williams, 2011; Lenc
+& Vedaldi, 2015). A representation is said to be invariant
+for a particular task if it does not change when nuisance fac-
+tors of the data, that are irrelevant to the task, are changed.
+An equivariant representation changes in a stable and pre-
+dictable manner when altering a factor of variation. A dis-
+entangled representation, in the sense used in the paper,
+is equivariant, since changing one factor of variation will
+change one dimension of a disentangled representation in a
+predictable manner. Given a task, it will be easy to obtain
+an invariant representation from the disentangled represen-
+tation by ignoring the dimensions encoding the nuisance
+factors for the task (Cohen & Welling, 2014).
+Building on a preliminary version of this paper, (Chen et al.,
+2018) recently proposed a minibatch-based alternative to
+our density-ratio-trick-based method for estimating the Total
+Correlation and introduced an information-theoretic disen-
+tangling metric.
+6. Experiments
+We compare FactorV AE toβ-V AE on the following data sets
+with i) known generative factors: 1) 2D Shapes(Matthey
+et al., 2017): 737,280 binary 64 ×64 images of 2D shapes
+with ground truth factors[number of values]: shape[3],
+scale[6], orientation[40], x-position[32], y-position[32].
+2) 3D Shapes (Burgess & Kim, 2018): 480,000 RGB
+64 ×64 ×3 images of 3D shapes with ground truth factors:
+shape[4], scale[8], orientation[15], ﬂoor colour[10], wall
+colour[10], object colour[10] ii) unknown generative fac-
+tors: 3) 3D Faces(Paysan et al., 2009): 239,840 grey-scale
+64 ×64 images of 3D Faces. 4) 3D Chairs(Aubry et al.,
+2014): 86,366 RGB 64 ×64 ×3 images of chair CAD
+models. 5) CelebA (cropped version) (Liu et al., 2015):
+202,599 RGB 64 ×64 ×3 images of celebrity faces. The
+
+--- PAGE 6 ---
+Disentangling by Factorising
+experimental details such as encoder/decoder architectures
+and hyperparameter settings are in Appendix A. The de-
+tails of the disentanglement metrics, along with a sensitivity
+analysis with respect to their hyperparameters, are given in
+Appendix B.
+reconstruction errornew disentanglement metric old disentanglement metric
+iteration iteration
+ 
+Figure 4.Reconstruction error (top), metric in Higgins et al. (2016)
+(middle), our metric (bottom). β-V AE (left), FactorV AE (right).
+The colours correspond to different values of βand γrespectively,
+and conﬁdence intervals are over 10 random seeds.
+Better
+Figure 5.Reconstruction error plotted against our disentanglement
+metric, both averaged over 10 random seeds at the end of training.
+The numbers at each point are values of β and γ. Note that we
+want low reconstruction error and a high disentanglement metric.
+-VAE FactorVAE
+origreconstr
+Figure 6.First row: originals. Second row: reconstructions. Re-
+maining rows: reconstructions of latent traversals across each
+latent dimension sorted by KL(q(zj|x)||p(zj)), for the best scor-
+ing models on our disentanglement metric. Left: β-V AE, score:
+0.814, β = 4. Right: FactorV AE, score: 0.889,γ = 35.
+True TC
+Discriminator TC estimate
+iteration iteration
+Figure 7.Total Correlation values for FactorV AE on 2D Shapes.
+Left: True TC value. Right: Discriminator’s estimate of TC.
+From Figure 4, we see that FactorV AE gives much better
+disentanglement scores than V AEs (β = 1), while barely
+sacriﬁcing reconstruction error, highlighting the disentan-
+gling effect of adding the Total Correlation penalty to the
+V AE objective. The best disentanglement scores for Factor-
+V AE are noticeably better than those forβ-V AE given the
+same reconstruction error. This can be seen more clearly
+in Figure 5 where the best mean disentanglement of Fac-
+torV AE (γ = 40) is around 0.82, signiﬁcantly higher than
+the one for β-V AE (β = 4 ), which is around 0.73, both
+with reconstruction error around 45. From Figure 6, we
+can see that both models are capable of ﬁnding x-position,
+y-position, and scale, but struggle to disentangle orienta-
+tion and shape, β-V AE especially. For this data set, neither
+method can robustly capture shape, the discrete factor of
+variation5.
+As a sanity check, we also evaluated the correlation between
+our metric and the metric in Higgins et al. (2016): Pearson
+(linear correlation coefﬁcient): 0.404, Kendall (proportion
+of pairs that have the same ordering): 0.310, Spearman
+(linear correlation of the rankings): 0.444, all with p-value
+0.000. Hence the two metrics show a fairly high positive
+correlation as expected.
+We have also examined how the discriminator’s estimate of
+the Total Correlation (TC) behaves and the effect of γ on
+the true TC. From Figure 7, observe that the discriminator
+is consistently underestimating the true TC, also conﬁrmed
+in (Rosca et al., 2018). However the true TC decreases
+throughout training, and a higher γ leads to lower TC, so
+the gradients obtained using the discriminator are sufﬁcient
+for encouraging independence in the code distribution.
+We then evaluated InfoWGAN-GP, the counterpart of Info-
+GAN that uses Wasserstein distance and gradient penalty.
+See Appendix G for an overview. One advantage of Info-
+GAN is that the Monte Carlo estimate of its objective is
+differentiable with respect to its parameters even for dis-
+crete codes c, which makes gradient-based optimisation
+straightforward. In contrast, V AE-based methods that rely
+on the reprameterisation trick for gradient-based optimisa-
+tion require zto be a reparameterisable continuous random
+5This is partly due to the fact that learning discrete factors
+would require using discrete latent variables instead of Gaussians,
+but jointly modelling discrete and continuous factors of variation
+is a non-trivial problem that needs further research.
+
+--- PAGE 7 ---
+Disentangling by Factorising
+variable and alternative approaches require various vari-
+ance reduction techniques for gradient estimation (Mnih
+& Rezende, 2016; Maddison et al., 2017). Thus we might
+expect Info(W)GAN(-GP) to show better disentangling in
+cases where some factors are discrete. Hence we use 4
+continuous latents (one for each continuous factor) and one
+categorical latent of 3 categories (one for each shape). We
+tuned for λ, the weight of the mutual information term
+in Info(W)GAN(-GP), ∈{0.0,0.1,0.2,..., 1.0}, number
+of noise variables ∈{5,10,20,40,80,160}and the learn-
+ing rates of the generator ∈{10−3,10−4}, discriminator
+∈{10−4,10−5}.
+old disentanglement metric
+new disentanglement metric
+iteration iteration
+Figure 8.Disentanglement scores for InfoWGAN-GP on 2D
+Shapes for 10 random seeds per hyperparameter setting. Left:
+Metric in Higgins et al. (2016). Right: Our metric.
+Figure 9.Latent traversals for InfoWGAN-GP on 2D Shapes
+across four continuous codes (ﬁrst four rows) and categorical code
+(last row) for run with best disentanglement score (λ= 0.2).
+However from Figure 8 we can see that the disentanglement
+scores are disappointingly low. From the latent traversals
+in Figure 9, we can see that the model learns only the scale
+factor, and tries to put positional information in the discrete
+latent code, which is one reason for the low disentanglement
+score. Using 5 continuous codes and no categorical codes
+did not improve the disentanglement scores however. Info-
+GAN with early stopping (before training instability occurs
+– see Appendix H) also gave similar results. The fact that
+some latent traversals give blank reconstructions indicates
+that the model does not generalise well to all parts of the
+domain of p(z).
+One reason InfoWGAN-GP’s poor performance on this data
+set could be that InfoGAN is sensitive to the generator and
+discriminator architecture, which is one thing we did not
+tune extensively. We use a similar architecture to the V AE-
+based approaches for 2D shapes for a fair comparison, but
+have also tried a bigger architecture which gave similar
+results (see Appendix H). If architecture search is indeed
+Better
+Figure 10.Same as Figure 5 for 3D Shapes data.
+reconstr orig
+wall 
+colour
+floor
+colour
+object
+colour
+orient-
+ation
+size
+shape
+Figure 11.Same as Figure 6 but for 3D Shapes data. Left: β-V AE,
+score: 1.00, β = 32. Right: FactorV AE, score: 1.00,γ = 7.
+important, this would be a weakness of InfoGAN relative to
+FactorV AE andβ-V AE, which are both much more robust
+to architecture choice. In Appendix H, we check that we
+can replicate the results of Chen et al. (2016) on MNIST
+using InfoWGAN-GP, verify that it makes training stable
+compared to InfoGAN, and give implementation details with
+further empirical studies of InfoGAN and InfoWGAN-GP.
+We now show results on the 3D Shapes data, which is a more
+complex data set of 3D scenes with additional features such
+as shadows and background (sky). We train both β-V AE
+and FactorV AE for 1M iterations. Figure 10 again shows
+that FactorV AE achieves much better disentanglement with
+barely any increase in reconstruction error compared to V AE.
+Moreover, while the top mean disentanglement scores for
+FactorV AE andβ-V AE are similar, the reconstruction error
+is lower for FactorV AE: 3515 (γ = 36) as compared to 3570
+(β = 24). The latent traversals in Figure 11 show that both
+models are able to capture the factors of variation in the
+best-case scenario. Looking at latent traversals across many
+random seeds, however, makes it evident that both models
+struggled to disentangle the factors for shape and scale.
+To show that FactorV AE also gives a valid generative model
+for both 2D Shapes and 3D Shapes, we present the log
+marginal likelihood evaluated on the entire data set together
+with samples from the generative model in Appendix E.
+We also show results forβ-V AE and FactorV AE experiments
+on the data sets with unknown generative factors, namely
+3D Chairs, 3D Faces, and CelebA. Note that inspecting la-
+tent traversals is the only evaluation method possible here.
+We can see from Figure 12 (and Figures 38 and 39 in Ap-
+pendix I) that FactorV AE has smaller reconstruction error
+
+--- PAGE 8 ---
+Disentangling by Factorising
+compared to β-V AE, and is capable of learning sensible
+factors of variation, as shown in the latent traversals in Fig-
+ures 13, 14 and 15. Unfortunately, as explained in Section 4,
+latent traversals tell us little about the robustness of our
+method.
+reconstruction error
+iteration iteration
+Figure 12.Plots of reconstruction error of β-V AE (left) and Fac-
+torV AE (right) for different values ofβand γon 3D Faces data
+over 5 random seeds.
+size
+azimuth
+back length
+leg style
+-VAE
+size
+azimuth
+back length
+FactorVAE
+Figure 13.β-V AE and FactorV AE latent traversals across each
+latent dimension sorted by KL on 3D Chairs, with annotations of
+the factor of variation corresponding to each latent unit.
+7. Conclusion and Discussion
+We have introduced FactorV AE, a novel method for disen-
+tangling that achieves better disentanglement scores than
+β-V AE on the 2D Shapes and 3D Shapes data sets for the
+same reconstruction quality. Moreover, we have identiﬁed
+weaknesses of the commonly used disentanglement metric
+of Higgins et al. (2016), and proposed an alternative metric
+that is conceptually simpler, is free of hyperparameters, and
+avoids the failure mode of the former. Finally, we have
+performed an experimental evaluation of disentangling for
+the V AE-based methods and InfoWGAN-GP, a more stable
+variant of InfoGAN, and identiﬁed its weaknesses relative
+to the V AE-based methods.
+One of the limitations of our approach is that low Total
+Correlation is necessary but not sufﬁcient for disentangling
+of independent factors of variation. For example, if all
+but one of the latent dimensions were to collapse to the
+prior, the TC would be 0 but the representation would not
+be disentangled. Our disentanglement metric also requires
+us to be able to generate samples holding one factor ﬁxed,
+which may not always be possible, for example when our
+training set does not cover all possible combinations of
+azimuth
+elevation
+azimuth
+lighting
+-VAE
+FactorVAE
+azimuth
+elevation
+lighting
+Figure 14.Same as Figure 13 but for 3D Faces.
+background brightness
+azimuth
+skin tone
+hair length
+background blueness
+fringe
+head shape
+FactorVAE
+-VAE
+background brightness
+hair colour
+azimuth
+hair colour
+skin tone
+hair length
+Figure 15.Same as Figure 13 but for CelebA.
+factors. The metric is also unsuitable for data with non-
+independent factors of variation.
+For future work, we would like to use discrete latent vari-
+ables to model discrete factors of variation and investigate
+how to reliably capture combinations of discrete and contin-
+
+--- PAGE 9 ---
+Disentangling by Factorising
+uous factors using discrete and continuous latents.
+Acknowledgements
+We thank Chris Burgess and Nick Watters for providing the
+data sets and helping to set them up, and thank Guillaume
+Desjardins, Sergey Bartunov, Mihaela Rosca, Irina Higgins
+and Yee Whye Teh for helpful discussions.
+References
+Achille, A. and Soatto, S. Information Dropout: Learn-
+ing optimal representations through noisy computation.
+IEEE Transactions on Pattern Analysis and Machine In-
+telligence, 2018.
+Arcones, M. A. and Gine, E. On the bootstrap of U and V
+statistics. The Annals of Statistics, pp. 655–674, 1992.
+Arjovsky, M., Chintala, S., and Bottou, L. Wasserstein
+Generative Adversarial Networks. In ICML, 2017.
+Aubry, M., Maturana, D., Efros, A. A., Russell, B. C., and
+Sivic, J. Seeing 3D chairs: exemplar part-based 2D-3D
+alignment using a large dataset of cad models. In CVPR,
+2014.
+Ba, J. L., Kiros, J. R., and Hinton, G. E. Layer normalization.
+arXiv preprint arXiv:1607.06450, 2016.
+Bengio, Y ., Courville, A., and Vincent, P. Representation
+learning: A review and new perspectives. IEEE transac-
+tions on Pattern Analysis and Machine Intelligence, 35
+(8):1798–1828, 2013.
+Brakel, P. and Bengio, Y . Learning independent features
+with adversarial nets for non-linear ICA. arXiv preprint
+arXiv:1710.05050, 2017.
+Burgess, C. and Kim, H. 3d shapes dataset.
+https://github.com/deepmind/3dshapes-dataset/, 2018.
+Chen, T. Q., Li, X., Grosse, R. B., and Duvenaud, D. K.
+Isolating sources of disentanglement in variational autoen-
+coders. In Advances in Neural Information Processing
+Systems, pp. 2615–2625, 2018.
+Chen, X., Duan, Y ., Houthooft, R., Schulman, J., Sutskever,
+I., and Abbeel, P. InfoGAN: Interpretable representation
+learning by information maximizing Generative Adver-
+sarial Nets. In NIPS, 2016.
+Cohen, T. and Welling, M. Learning the irreducible repre-
+sentations of commutative lie groups. In ICML, 2014.
+Denton, E. L. and Birodkar, V . Unsupervised learning of
+disentangled representations from video. In NIPS, 2017.
+Desjardins, G., Courville, A., and Bengio, Y . Disentan-
+gling factors of variation via generative entangling. arXiv
+preprint arXiv:1210.5474, 2012.
+Duchi, J., Hazan, E., and Singer, Y . Adaptive subgradient
+methods for online learning and stochastic optimization.
+JMLR, 12(Jul):2121–2159, 2011.
+Eastwood, C. and Williams, C. A framework for the quanti-
+tative evaluation of disentangled representations. InICLR,
+2018.
+Gini, C. W. Variability and mutability, contribution to the
+study of statistical distributions and relations. Journal of
+American Statistical Association, 66:534–544, 1971.
+Goodfellow, I., Lee, H., Le, Q. V ., Saxe, A., and Ng, A. Y .
+Measuring invariances in deep networks. In NIPS, 2009.
+Goodfellow, I., Pouget-Abadie, J., Mirza, M., Xu, B.,
+Warde-Farley, D., Ozair, S., Courville, A., and Bengio, Y .
+Generative Adversarial Nets. In NIPS, 2014.
+Goroshin, R., Bruna, J., Tompson, J., Eigen, D., and LeCun,
+Y . Unsupervised learning of spatiotemporally coherent
+metrics. In ICCV, 2015.
+Gulrajani, I., Ahmed, F., Arjovsky, M., Dumoulin, V ., and
+Courville, A. Improved training of wasserstein GANs. In
+NIPS, 2017.
+Higgins, I., Matthey, L., Pal, A., Burgess, C., Glorot, X.,
+Botvinick, M., Mohamed, S., and Lerchner, A. Beta-
+V AE: Learning basic visual concepts with a constrained
+variational framework. 2016.
+Hinton, G. E., Krizhevsky, A., and Wang, S. D. Trans-
+forming auto-encoders. In International Conference on
+Artiﬁcial Neural Networks, pp. 44–51. Springer, 2011.
+Hoffman, M. D. and Johnson, M. J. ELBO surgery:
+yet another way to carve up the variational evidence
+lower bound. In Workshop in Advances in Approximate
+Bayesian Inference, NIPS, 2016.
+Hsu, W. N., Zhang, Y ., and Glass, J. Unsupervised learning
+of disentangled and interpretable representations from
+sequential data. In NIPS, 2017.
+Ioffe, S. and Szegedy, C. Batch normalization: Accelerating
+deep network training by reducing internal covariate shift.
+In ICML, 2015.
+Kingma, D. P. and Ba, J. Adam: A method for stochastic
+optimization. In ICLR, 2015.
+Kingma, D. P. and Welling, M. Auto-encoding variational
+Bayes. 2014.
+
+--- PAGE 10 ---
+Disentangling by Factorising
+Kingma, D. P., Mohamed, S., Rezende, D. J., and Welling,
+M. Semi-supervised learning with deep generative mod-
+els. In NIPS, 2014.
+Kivinen, J. J. and Williams, C. Transformation equivariant
+boltzmann machines. In International Conference on
+Artiﬁcial Neural Networks, 2011.
+Kulkarni, T., Whitney, W. F., Kohli, P., and Tenenbaum, J.
+Deep convolutional inverse graphics network. In NIPS,
+2015.
+Kumar, A., Sattigeri, P., and Balakrishnan, A. Variational
+inference of disentangled latent concepts from unlabeled
+observations. In ICLR, 2018.
+Lake, B. M., Ullman, T. D., Tenenbaum, J. B., and Gersh-
+man, S. J. Building machines that learn and think like
+people. Behavioral and Brain Sciences, pp. 1–101, 2016.
+Lenc, K. and Vedaldi, A. Understanding image represen-
+tations by measuring their equivariance and equivalence.
+In CVPR, 2015.
+Liu, Z., Luo, P., Wang, X., and Tang, X. Deep learning
+face attributes in the wild. In Proceedings of the IEEE
+International Conference on Computer Vision, pp. 3730–
+3738, 2015.
+Maddison, C. J., Mnih, A., and Teh, Y . W. The CONCRETE
+distribution: A continuous relaxation of discrete random
+variables. In ICLR, 2017.
+Makhzani, A. and Frey, B. PixelGAN autoencoders. In
+NIPS, 2017.
+Makhzani, A., Shlens, J., Jaitly, N., Goodfellow, I., and
+Frey, B. Adversarial autoencoders. arXiv preprint
+arXiv:1511.05644, 2015.
+Mathieu, M. F., Zhao, J. J., Ramesh, A., Sprechmann, P.,
+and LeCun, Y . Disentangling factors of variation in deep
+representation using adversarial training. In NIPS, 2016.
+Matthey, L., Higgins, I., Hassabis, D., and Lerchner,
+A. dSprites: Disentanglement testing Sprites dataset.
+https://github.com/deepmind/dsprites-dataset/, 2017.
+Mescheder, L., Nowozin, S., and Geiger, A. Adversarial
+variational Bayes: Unifying Variational Autoencoders
+and Generative Adversarial Networks. In ICML, 2017.
+Mnih, A. and Rezende, D. J. Variational inference for Monte
+Carlo objectives. In ICML, 2016.
+Mohamed, S. and Lakshminarayanan, B. Learn-
+ing in implicit generative models. arXiv preprint
+arXiv:1610.03483, 2016.
+Nguyen, X., Wainwright, M. J., and Jordan, M. I. Estimating
+divergence functionals and the likelihood ratio by convex
+risk minimization. IEEE Transactions on Information
+Theory, 2010.
+Nowozin, S., Cseke, B., and Tomioka, R. f-GAN: Training
+generative neural samplers using variational divergence
+minimization. In NIPS, 2016.
+Paysan, P., Knothe, R., Amberg, B., Romdhani, S., and
+Vetter, T. A 3D face model for pose and illumination
+invariant face recognition. In Proceedings of the IEEE
+International Conference on Advanced Video and Signal
+based Surveillance, pp. 296–301, 2009.
+Perry, G., Rolls, E. T., and Stringer, S. M. Continuous trans-
+formation learning of translation invariant representations.
+Experimental Brain Research, 204(2):255–270, 2010.
+Reed, S., Sohn, K., Zhang, Y ., and Lee, H. Learning to
+disentangle factors of variation with manifold interaction.
+In ICML, 2014.
+Rezende, D. J., Mohamed, S., and Wierstra, D. Stochas-
+tic backpropagation and approximate inference in deep
+generative models. In ICML, 2014.
+Rosca, M., Lakshminarayanan, B., and Mohamed, S. Distri-
+bution matching in variational inference. arXiv preprint
+arXiv:1802.06847, 2018.
+Schmidhuber, J. Learning factorial codes by predictability
+minimization. Neural Computation, 4(6):863–879, 1992.
+Siddharth, N., Paige, B., Van de Meent, J. W., Desmaison,
+A., Wood, F., Goodman, N. D., Kohli, P., and Torr, P.
+H. S. Learning disentangled representations with semi-
+supervised deep generative models. In NIPS, 2017.
+Sønderby, C. K., Caballero, J., Theis, L., Shi, W., and
+Husz´ar, F. Amortised MAP inference for image super-
+resolution. In ICLR, 2016.
+Sugiyama, M., Suzuki, T., and Kanamori, T. Density-ratio
+matching under the Bregman divergence: a uniﬁed frame-
+work of density-ratio estimation. Annals of the Institute
+of Statistical Mathematics, 64(5):1009–1044, 2012.
+Watanabe, S. Information theoretical analysis of multivari-
+ate correlation. IBM Journal of research and development,
+4(1):66–82, 1960.
+Yang, H. H. and Amari, S. I. Adaptive online learning
+algorithms for blind separation: maximum entropy and
+minimum mutual information. Neural computation, 9(7):
+1457–1482, 1997.
+
+--- PAGE 11 ---
+Disentangling by Factorising
+Appendix
+A. Experimental Details for FactorV AE and
+β-V AE
+We use a Convolutional Neural Network for the encoder,
+a Deconvolutional Neural Network for the decoder and a
+Multi-Layer Perceptron (MLP) with for the discriminator
+in FactorV AE for experiments on all data sets. We use [0,1]
+normalised data as targets for the mean of a Bernoulli dis-
+tribution, using negative cross-entropy for log p(x|z) and
+Adam optimiser (Kingma & Ba, 2015) with learning rate
+10−4, β1 = 0.9,β2 = 0.999 for the V AE updates, as in Hig-
+gins et al. (2016). We also use Adam for the discriminator
+updates with β1 = 0.5,β2 = 0.9 and a learning rate tuned
+from {10−4,10−5}. We use 10−4 for 2D Shapes and 3D
+Faces, and 10−5 for 3D Shapes, 3D Chairs and CelebA. The
+encoder outputs parameters for the mean and log-variance
+of Gaussian q(z|x), and the decoder outputs logits for each
+entry of the image. We use the same encoder/decoder ar-
+chitecture for β-V AE and FactorV AE, shown in Tables 1,
+2, and 3. We use the same 6 layer MLP discriminator with
+1000 hidden units per layer and leaky ReLU (lReLU) non-
+linearity, that outputs 2 logits in all FactorV AE experiments.
+We noticed that smaller discriminator architectures work
+ﬁne, but noticed small improvements up to 6 hidden layers
+and 1000 hidden units per layer. Note that scaling the dis-
+criminator learning rate is not equivalent to scaling γ, since
+γdoes not affect the discriminator loss. See Algorithm 2 for
+details of FactorV AE updates. We train for3×105 iterations
+on 2D Shapes, 5 ×105 iterations on 3D Shapes, and 106
+iterations on Chairs, 3D Faces and CelebA. We use a batch
+size of 64 for all data sets.
+B. Details for the Disentanglement Metrics
+We performed a sensitivity analysis of each metric with re-
+spect to its hyperparameters (c.f. Figure 2). In Figures 16,
+we show that the metric in Higgins et al. (2016) is very sen-
+sitive to number of iterations of the Adagrad (Duchi et al.,
+2011) optimiser with learning rate 0.01 (used in Higgins
+et al. (2016)), and constantly improves with more iterations.
+This suggests that one might want to use less noisy multi-
+class logistic regression solvers than gradient-descent based
+methods. The number of data points used to evaluate the
+metric after optimisation did not seem to help reduce vari-
+ance beyond 800. So in our experiments, we use L= 200
+and 10000 iterations, with a batch size of 10 per iteration of
+training the linear classiﬁer, and use a batch of size 800 to
+evaluate the metric at the end of training. Each evaluation of
+this metric took around 30 minutes on a single GPU, hence
+we could not afford to train for more iterations.
+For our disentanglement metric, we ﬁrst prune out all la-
+tent dimensions that have collapsed to the prior (q(zj|x) =
+Table 1.Encoder and Decoder architecture for 2D Shapes data.
+Encoder Decoder
+Input64×64 binary image Input∈R10
+4 ×4 conv. 32 ReLU. stride 2 FC. 128 ReLU.
+4 ×4 conv. 32 ReLU. stride 2 FC.4 ×4 ×64 ReLU.
+4 ×4 conv. 64 ReLU. stride 2 4 ×4 upconv. 64 ReLU. stride 2
+4 ×4 conv. 64 ReLU. stride 2 4 ×4 upconv. 32 ReLU. stride 2
+FC. 128. FC.2 ×10. 4 ×4 upconv. 32 ReLU. stride 2
+4 ×4 upconv. 1. stride 2
+Table 2.Encoder and Decoder architecture for 3D Shapes, CelebA,
+Chairs data.
+Encoder Decoder
+Input64×64×3RGB imageInput∈R6 (3D Shapes)R10(CelebA, Chairs)
+4×4conv. 32 ReLU. stride 2FC. 256 ReLU.
+4×4conv. 32 ReLU. stride 2FC.4×4×64ReLU.
+4×4conv. 64 ReLU. stride 24×4upconv. 64 ReLU. stride 2
+4×4conv. 64 ReLU. stride 24×4upconv. 32 ReLU. stride 2
+FC. 256. FC.2×10. 4×4upconv. 32 ReLU. stride 2
+4×4upconv. 3. stride 2
+Table 3.Encoder and Decoder architecture for 3D Faces data.
+Encoder Decoder
+Input64×64greyscale image Input∈R10
+4 ×4 conv. 32 ReLU. stride 2 FC. 256 ReLU.
+4 ×4 conv. 32 ReLU. stride 2 FC.4 ×4 ×64ReLU.
+4 ×4 conv. 64 ReLU. stride 2 4 ×4 upconv. 64 ReLU. stride 2
+4 ×4 conv. 64 ReLU. stride 2 4 ×4 upconv. 32 ReLU. stride 2
+FC. 256. FC.2 ×10. 4 ×4 upconv. 32 ReLU. stride 2
+4 ×4 upconv. 1. stride 2
+p(zj)). Then we just use the surviving dimensions for the
+majority vote. From the sensitivity analysis our metric in
+Figure 17, we observe that our metric is much less sen-
+sitive to hyperparameters than the metric in Higgins et al.
+(2016). We useL= 100 and take the majority vote classiﬁer
+from 800 votes. This only takes a few seconds on a single
+GPU. The majority vote classiﬁer Cworks as follows: sup-
+pose we are given data (ai,bi)M
+i=1,ai ∈{1,...,D },bi ∈
+{1,...,K }(so M = 500). Then for j ∈{1,...,D }, let
+Vjk = ∑M
+i=1 I(ai = j,bi = k). Then the majority vote
+classiﬁer is deﬁned to be C(j) = arg maxkVjk.
+Note that D, the dimensionality of the latents, does not
+affect the metric; for a classiﬁer that chooses at random, the
+accuracy is 1/K, independent of D.
+For discrete latent variables, we use Gini’s deﬁnition of
+
+--- PAGE 12 ---
+Disentangling by Factorising
+Figure 16.Mean and standard deviation of metric in Higgins et al.
+(2016) across 10 random seeds for varying Land number of Ada-
+grad optimiser iterations (batch size 10). The number of points
+used for evaluation after optimisation is ﬁxed to 800. These were
+all evaluated on a ﬁxed, randomly chosen β-V AE model that was
+trained to convergence on the 2D Shapes data.
+Figure 17.Mean and standard deviation of our metric across 10
+random seeds for varying Land number of points used for evalua-
+tion. These were all evaluated on a ﬁxed, randomly chosen β-V AE
+model that was trained to convergence on the 2D Shapes data.
+empirical variance:
+Var
+⋀
+(x) = 1
+2N(N −1)
+N∑
+i,j=1
+d(xi,xj) (4)
+for x= [x1,...,x N] ∈RN, d(xi,xj) = 1 if xi ̸= xj and
+0 if xi = xj. Note that this is equal to empirical variance
+for continuous variables when d(xi,xj) = (xi −xj)2.
+C. KL Decomposition
+The KL term in the V AE objective decomposes as follows
+(Makhzani & Frey, 2017):
+Lemma 1. Epdata(x)[KL(q(z|x)||p(z))] = Iq(x; z) +
+KL(q(z)||p(z)) where q(x,z) = pdata(x)q(z|x).
+Proof.
+Epdata(x)[KL(q(z|x)||p(z))]
+= Epdata(x)Eq(z|x)
+[
+log q(z|x)
+p(z)
+]
+= Epdata(x)Eq(z|x)
+[
+log q(z|x)
+q(z)
+q(z)
+p(z)
+]
+= Epdata(x)Eq(z|x)
+[
+log q(z|x)
+q(z) + log q(z)
+p(z)
+]
+= Epdata(x)[KL(q(z|x)||q(z))] + Eq(x,z)
+[
+log q(z)
+p(z)
+]
+= Iq(x; z) + Eq(z)
+[
+log q(z)
+p(z)
+]
+= Iq(x; z) + KL(q(z)||p(z))
+Remark. Note that this decomposition is equivalent to
+that in Hoffman & Johnson (2016), written as follows:
+Epdata(x)[KL(q(z|x)||p(z))] = Ir(i; z) + KL(q(z)||p(z))
+where r(i,z) = 1
+Nq(z|x(i)), hence r(z|i) = q(z|x(i)),
+r(z) = 1
+N
+∑N
+i=1 q(z|x(i)) = q(z).
+Proof.
+Ir(i; z) = Er(i)[KL(r(z|i)||r(z))]
+= 1
+N
+N∑
+i=1
+KL(q(z|x(i))||q(z))
+= Epdata(x)[KL(q(z|x)||q(z))]
+= Iq(x; z)
+D. Using a Batch Estimate ofq(z) for
+Estimating TC
+We have also tried using a batch estimate for the density
+q(z), thus optimising this estimate of the TC directly instead
+of having a discriminator and using the density ratio trick.
+In other words, we tried q(z) ≈ˆq(z) = 1
+|B|
+∑
+i∈Bq(z|x(i)),
+and using the estimate:
+KL(q(z)||
+∏
+j
+q(zj)) = Eq(z)
+[
+log q(z)∏
+jq(zj)
+]
+≈Eq(z)
+[
+log ˆq(z)∏
+j ˆq(zj)
+]
+(5)
+
+--- PAGE 13 ---
+Disentangling by Factorising
+Note that:
+Eq(z)
+[
+log ˆq(z)∏
+j ˆq(zj)
+]
+≈ 1
+H
+H∑
+h=1
+[
+log 1
+|B|
+∑
+i∈B
+D∏
+j=1
+q(z(h)
+j |x(i))
+−log
+D∏
+j=1
+1
+|B|
+∑
+i∈B
+q(z(h)
+j |x(i))
+]
+(6)
+for z(h) iid
+∼ q(z). However while experimenting on 2D
+Shapes, we observed that the value of log q(z(h)) becomes
+very small (negative with high absolute value) for latent
+dimension d≥2 during training, because ˆq(z) is not a good
+enough approximation to q(z) unless Bis very big. As
+training progresses for the V AE, the variance of Gaussians
+q(z|x(i)) becomes smaller and smaller, so they do not over-
+lap too much in higher dimensions. Hence we get z(h) ∼
+q(z) that land on the tails of ˆq(z) = 1
+|B|
+∑
+i∈Bq(z|x(i)),
+giving worryingly small values of log ˆq(z(h)). On the other
+hand ∏
+j ˆq(z(h)
+j ), a mixture of |B|d Gaussians hence of
+much higher entropy, gives much more stable values of
+log ∏
+j ˆq(z(h)
+j ). From Figure 18, we can see that even with
+Bas big as 10,000, we get negative values for the esti-
+mate of TC, which is a KL divergence and hence should
+be non-negative, hence this method of using a batch es-
+timate for q(z) does not work. A ﬁx is to use samples
+from ˆq(z) instead of q(z), but this seemed to give a similar
+reconstruction-disentanglement trade-off to β-V AE. Very
+recently, work from (Chen et al., 2018) has shown that dis-
+entangling can be improved by using samples from ˆq(z).
+beta=1.0,TC estimate=-193.30 beta=5.0,TC estimate=-10.62 beta=9.0, TC estimate=-2.22
+Figure 18.Histogram of log ˆq(z(h)) (top) and ∏d
+j=1 ˆq(z(h)
+j ) (bot-
+tom) for z(h) iid
+∼q(z) with |B|= 10000, d = 10. The columns
+correspond to values of β = 1,5,9 for training β-V AE. In the title
+of each histogram, there is an estimate of TC based on the samples
+of z(h).
+E. Log Marginal Likelihood and Samples
+We give the log marginal likelihood of each of the best per-
+forming β-V AE and FactorV AE models (in terms of disen-
+tanglement) for both the 2D Shapes and 3D Shapes data sets
+along with samples from the generative model. Since the log
+marginal likelihood is intractable, we report the Importance-
+Weighted Autoencoder (IWAE) bound with 5000 particles,
+Figure 19.Randomly chosen samples from the best performing (in
+terms of disentanglement) β-V AE generative model (β = 4).
+Figure 20.Randomly chosen samples from the best performing (in
+terms of disentanglement) FactorV AE generative model (γ = 35).
+Figure 21.Randomly chosen samples from the best performing (in
+terms of disentanglement) β-V AE generative model (β = 32).
+Figure 22.Randomly chosen samples from the best performing (in
+terms of disentanglement) FactorV AE generative model (γ = 6).
+in line with standard practice in the generative modelling
+literature.
+In Figures 19 and 20, the samples for FactorV AE are ar-
+guably more representative of the data set than those of
+β-V AE. For exampleβ-V AE has occasional samples with
+two separate shapes in the same image (Figure 19). The log
+marginal likelihood for the best performing β-V AE (β = 4)
+is -46.1, whereas for FactorV AE it is -51.9 ( γ = 35 ) (a
+randomly chosen V AE run gives -43.3). So on 2D Shapes,
+FactorV AE gives better samples but worse log marginal
+likelihood.
+In Figures 21 and 22, the samples for β-V AE appear
+more coherent than those for FactorV AE. However the log
+marginal likelihood for β-V AE (β = 32) is -3534, whereas
+for FactorV AE it is -3520 (γ = 6) (a randomly chosen V AE
+run gives -3517). So on 3D Shapes, FactorV AE gives worse
+
+--- PAGE 14 ---
+Disentangling by Factorising
+samples but better log marginal likelihood.
+In general, if one seeks to learn a generative model with a
+disentangled latent space, it would make sense to choose
+the model with the lowest value of βor γamong those with
+similarly high disentanglement performance.
+F. Losses and Experiments for other related
+Methods
+The Adversarial Autoencoder (AAE) (Makhzani et al., 2015)
+uses the following objective
+1
+N
+N∑
+i=1
+[
+Eq(z|x(i))[log p(x(i)|z)]
+]
+−KL(q(z)||p(z)), (7)
+utilising the density ratio trick to estimate the KL term.
+Information Dropout (Achille & Soatto, 2018) uses the ob-
+jective
+1
+N
+N∑
+i=1
+Eq(z|x(i))[log p(x(i)|z)] −βKL(q(z|x(i))||q(z)).
+(8)
+The following objective is also considered in the paper but
+is dismissed as intractable:
+1
+N
+N∑
+i=1
+[
+Eq(z|x(i))[log p(x(i)|z)]−βKL(q(z|x(i))||q(z))
+]
+−γKL(q(z)||
+d∏
+j=1
+q(zj))
+(9)
+Note that it is similar to the FactorV AE objective (which
+has β = 1), but with p(z) in the ﬁrst KL term replaced with
+q(z).
+DIP-V AE (Kumar et al., 2018) uses the V AE objective
+with an additional penalty on how much the covariance of
+q(z) deviates from the identity matrix, either using the law
+of total covariance Covq(z)[z] = Epdata(x)Covq(z|x)[z] +
+Covpdata(x)(Eq(z|x)[z]) (DIP-V AE I):
+1
+N
+N∑
+i=1
+[
+Eq(z|x(i))[log p(x(i)|z)] −KL(q(z|x(i))||p(z))
+]
+−λod
+∑
+i̸=j
+[Covpdata(x)[µ(x)]]2
+ij
+−λd
+∑
+i
+([Covpdata(x)[µ(x)]]ii −1)2 (10)
+where µ(x) = mean(q(z|x)), or directly (DIP-V AE II):
+1
+N
+N∑
+i=1
+[
+Eq(z|x(i))[log p(x(i)|z)] −KL(q(z|x(i))||p(z))
+]
+−λod
+∑
+i̸=j
+[Covq(z)[z]]2
+ij
+−λd
+∑
+i
+([Covq(z)[z]]ii −1)2 (11)
+One could argue that during training of FactorV AE,∏
+jq(zj) will be similar to p(z), assuming the prior is fac-
+torial, due to the KL(q(z|x)||p(z)) term in the objective.
+Hence we also investigate a modiﬁed FactorV AE objective
+that replaces ∏
+jq(zj) with p(z):
+1
+N
+N∑
+i=1
+[
+Eq(z|x(i))[log p(x(i)|z)]−KL(q(z|x(i))||p(z))
+]
+−γKL(q(z)||p(z)) (12)
+However as shown in Figure 40 of Appendix I, the his-
+tograms of samples from the marginals are clearly quite
+different from the the prior for FactorV AE.
+reconstruction errorold disentanglement metricnew disentanglement metric
+iteration iteration
+Figure 23.Same as Figure 4 but for AAE (left) and a variant of
+FactorV AE (Eqn. (12).
+Moreover we show experimental results for AAE (adding
+a γ coefﬁcient in front of the KL(q(z)||p(z)) term of
+the objective and tuning it) and the variant of FactorV AE
+(Eqn. (12)) on the 2D Shapes data. From Figure 23, we see
+that the disentanglement performance for both are some-
+what lower than that for FactorV AE. This difference could
+be explained as a beneﬁt of directly encouraging q(z) to
+be factorised (FactorV AE) instead of encouraging it to ap-
+proach an arbitrarily chosen factorised priorp(z) = N(0,I)
+(AAE, Eqn. (12)). Information Dropout and DIP-V AE did
+
+--- PAGE 15 ---
+Disentangling by Factorising
+not have enough experimental details in the paper nor pub-
+licly available code to have their results reproduced and
+compared against.
+G. InfoGAN and InfoWGAN-GP
+We give an overview of InfoGAN (Chen et al., 2016) and
+InfoWGAN-GP, its counterpart using Wasserstein distance
+and gradient penalty. InfoGAN uses latentsz= (c,ϵ) where
+cmodels semantically meaningful codes and ϵmodels in-
+compressible noise. The generative model is deﬁned by
+a generator Gwith the process: c ∼p(c),ϵ ∼p(ϵ),z =
+(c,ϵ), x= G(z). i.e. p(z) = p(c)p(ϵ). GANs are deﬁned as
+a minimax game on some objectiveV(D,G), where Dis ei-
+ther a discriminator (e.g. for the original GAN (Goodfellow
+et al., 2014)) that outputs log probabilities for binary clas-
+siﬁcation, or a critic (e.g. for Wasserstein-GAN (Arjovsky
+et al., 2017)) that outputs a real-valued scalar. InfoGAN
+deﬁnes an extra encoding distribution Q(c|x) that is used to
+deﬁne an extra penalty:
+L(G,Q) = Ep(c)Ep(ϵ)[log Q(c|G(c,ϵ))] (13)
+that is added to the GAN objective. Hence InfoGAN is the
+following minimax game on the parameters of neural nets
+D,G,Q :
+min
+G,Q
+max
+D
+VI(D,G,Q ) = min
+G,Q
+max
+D
+V(D,G) −λL(G,Q)
+(14)
+L can be interpreted as a variational lower bound to
+I(c; G(c,ϵ)), with equality at Q= arg minQVI(D,G,Q ).
+i.e. Lencourages the codes to be more informative about
+the image. From the deﬁnition of L, it can also be seen as
+the reconstruction error of codes in the latent space. The
+original InfoGAN deﬁnes:
+V(D,G) = Epdata(x)[D(x)] −Ep(z)[D(G(z))] (15)
+same as the original GAN objective where Doutputs log
+probabilities. However as we’ll show in Appendix H this
+has known instability issues in training. So it is natural to try
+replacing this with the more stable WGAN-GP (Gulrajani
+et al., 2017) objective:
+V(D,G) =Epdata(x)[D(x)] −Ep(z)[D(G(z))]
++ η(||∇xD(x)|x=ˆx||2 −1)2 (16)
+for ˆx= πxr+ (1−π)xf with π∼U[0,1], xr ∼pdata(x),
+zf ∼ p(z), xf =stop gradient(G(zf)) and with a
+new ˆxfor each iteration of optimisation. Thus we obtain
+InfoWGAN-GP.
+H. Empirical Study of InfoGAN and
+InfoWGAN-GP
+To begin with, we implemented InfoGAN and InfoWGAN-
+GP on MNIST using the hyperparameters given in Chen
+et al. (2016) to better understand its behaviour, using 1 cat-
+egorical code with 10 categories, 2 continuous codes, and
+62 noise variables. We use priors p(cj) = U[−1,1] for the
+continuous codes, p(cj) = 1
+J for categorical codes with J
+categories, and p(ϵj) = N(0,1) for the noise variables. For
+2D Shapes data we use 1 categorical codes with 3 categories
+(J = 3), 4 continuous codes, and 5 noise variables. The
+number of noise variables did not seem to have a noticeable
+effect on the experiment results. We use the Adam opti-
+miser (Kingma & Ba, 2015) with β1 = 0.5,β2 = 0.999,
+and learning rate 10−3 for the generator updates and 10−4
+for the discriminator updates. The detailed Discrimina-
+tor/Encoder/Generator architecture are given in Tables 4
+and 5. The architecture for InfoWGAN-GP is the same
+as InfoGAN, except that we use no Batch Normalisation
+(batchnorm) (Ioffe & Szegedy, 2015) for the convolutions
+in the discriminator, and replace batchnorm with Layer Nor-
+malisation (Ba et al., 2016) in the fully connected layer
+that follows the convolutions as recommended in (Gulrajani
+et al., 2017). We use gradient penalty coefﬁcient η = 10,
+again as recommended.
+iteration
+Figure 24.Discriminator accuracy of InfoGAN on MNIST
+throughout training.
+We ﬁrstly observe that for all runs, we eventually get a
+degenerate discriminator that predicts all inputs to be real, as
+in Figure 24. This is the well-known instability issue of the
+original GAN. We have tried using a smaller learning rate for
+the discriminator, and although this delays the degenerate
+behaviour it does not prevent it. Hence early stopping seems
+crucial, and all results shown below are from well before
+the degenerate behaviour occurs.
+Chen et al. (2016) claim that the categorical code learns digit
+class (discrete factor of variation) and that the continuous
+codes learn azimuth and width, but when plotting latent
+traversals for each run, we observed that this is inconsistent.
+We show ﬁve randomly chosen runs in Figure 25. The digit
+class changes in the continuous code traversals and there are
+overlapping digits in the categorical code traversal. Similar
+results hold for InfoWGAN-GP in Figure 36.
+We also tried visualising the reconstructions: given an im-
+age, we push the image through the encoder to obtain latent
+codes c, ﬁx this cand vary the noise ϵto generate multiple
+reconstructions for the same image. This is to check the
+extent to which the noiseϵcan affect the generation. We can
+see in Figure 26 that digit class often changes when varying
+
+--- PAGE 16 ---
+Disentangling by Factorising
+Table 4.InfoGAN architecture for MNIST data. 2 continuous
+codes, 1 categorical code with 10 categories, 62 noise variables.
+discriminatorD /encoderQ generatorG
+Input28×28greyscale image Input∈R74
+4×4conv. 64 lReLU. stride 2 FC. 1024 ReLU. batchnorm
+4×4conv. 128 lReLU. stride 2. batchnormFC.7×7×128ReLU. batchnorm
+FC. 1024 lReLU. batchnorm 4×4upconv. 64 ReLU. stride 2. batchnorm
+FC. 1. output layer for D 4×4upconv. 1 Sigmoid. stride 2
+FC. 128 lReLU. batchnorm. FC2×2 + 1×10
+Table 5.InfoGAN architecture for 2D Shapes data. 4 continuous
+codes, 1 categorical code with 3 categories, 5 noise variables.
+discriminatorD /encoderQ generatorG
+Input64×64binary image Input∈R12
+4×4conv. 32 lReLU. stride 2 FC. 128 ReLU. batchnorm
+4×4conv. 32 lReLU. stride 2. batchnormFC.4×4×64ReLU. batchnorm
+4×4conv. 64 lReLU. stride 2. batchnorm4×4upconv. 64 lReLU. stride 2. batchnorm
+4×4conv. 64 lReLU. stride 2. batchnorm4×4upconv. 32 lReLU. stride 2. batchnorm
+FC. 128 lReLU. batchnorm 4×4upconv. 32 lReLU. stride 2. batchnorm
+FC. 1. output layer for D 4×4upconv. 1 Sigmoid. stride 2
+FC. 128 lReLU. batchnorm. FC4×2 + 1×3for Q
+Table 6.Bigger InfoGAN architecture for 2D Shapes data. 4 con-
+tinuous codes, 1 categorical code with 3 categories, 128 noise
+variables.
+discriminatorD /encoderQ generatorG
+Input64×64binary image Input∈R136
+4×4conv. 64 lReLU. stride 2 FC. 1024 ReLU. batchnorm
+4×4conv. 128 lReLU. stride 2. batchnormFC.8×8×256ReLU. batchnorm
+4×4conv. 256 lReLU. stride 2. batchnorm4×4upconv. 256 lReLU. stride 1. batchnorm
+4×4conv. 256 lReLU. stride 1. batchnorm4×4upconv. 256 lReLU. stride 1. batchnorm
+4×4conv. 256 lReLU. stride 1. batchnorm4×4upconv. 128 lReLU. stride 2. batchnorm
+FC. 1024 lReLU. batchnorm 4×4upconv. 64 lReLU. stride 2. batchnorm
+FC. 1. output layer for D 4×4upconv. 1 Sigmoid. stride 2
+FC. 128 lReLU. batchnorm. FC4×2 + 1×3for Q
+ϵ, so the model struggles to cleanly separate semantically
+meaningful information and incompressible noise.
+Furthermore, we investigated the sensitivity of the model
+to the number of latent codes. We show latent traversals
+using three continuous codes instead of two in Figure 27.
+It is evident that the model tries to put more digit class
+information into the continuous traversals. So the number
+of codes is an important hyperparameter to tune, whereas
+V AE methods are less sensitive to the choice of number
+of codes since they can prune out unnecessary latents by
+collapsing q(zj|x) to the prior p(zj).
+We also tried varying the number of categories for the cat-
+egorical code. Using 2 categories, we see from Figure 28
+that the model tries to put much more information about
+digit class into the continuous latents, as expected. More-
+over from Figure 30, we can see that the noise variables
+also have more information about the digit class. However,
+when we use 20 categories, we see that the model still puts
+Figure 25.Latent traversals for InfoGAN on MNIST across the
+two continuous codes (ﬁrst two rows) and the categorical code
+(last row) for 5 different random seeds.
+Figure 26.Reconstructions for InfoGAN on MNIST. First column:
+original image. Remaining columns: reconstructions varying the
+noise latent ϵ.
+Figure 27.Latent traversals for InfoGAN on MNIST across the
+three continuous codes (ﬁrst three rows) and the categorical code
+(last row).
+information about the digit class in the continuous latents.
+However from Figure 31 we see that the noise variables
+contain less semantically meaningful information.
+Using InfoWGAN-GP solved the degeneracy issue and
+makes training more stable (see Figure 33), but we observed
+that the other problems persisted (see e.g. Figure 36).
+
+--- PAGE 17 ---
+Disentangling by Factorising
+Figure 28.Latent traversals for InfoGAN on MNIST across the
+two continuous codes (ﬁrst two rows) and the categorical code
+(last row) using 2 categories
+Figure 29.Latent traversals for InfoGAN on MNIST across the
+two continuous codes (ﬁrst two rows) and the categorical code
+(last two rows) using 20 categories
+Figure 30.Same as Figure 26 but the categorical code having 2
+categories.
+Figure 31.Same as Figure 30 but with 20 categories.
+iteration
+Figure 32.The generator loss −Ep(z)[D(G(z))], discriminator
+loss Epdata(x)[D(x)] −Ep(z)[D(G(z))] and the InfoGAN reg-
+ulariser term −Lfor InfoWGAN-GP on MNIST with λ= 1
+For 2D Shapes, we have also tried using a bigger architec-
+ture for InfoWGAN-GP that is used for a data set of similar
+dimensions (Chairs data set) in Chen et al. (2016). See
+iteration
+Figure 33.Same as Figure 32 but for 2D Shapes.
+old disentanglement metric
+new disentanglement metric
+iteration iteration
+Figure 34.Disentanglement scores for InfoWGAN-GP on 2D
+Shapes with bigger architecture (Table 6) for 10 random seeds
+per hyperparameter setting. Left: Metric in Higgins et al. (2016).
+Right: Our metric.
+Figure 35.Latent traversals for InfoWGAN-GP on 2D Shapes
+across the four continuous codes (ﬁrst four rows) and the cate-
+gorical code (last row) with bigger architecture (Table 6) for run
+with best disentanglement score (λ= 0.6).
+Table 6. However as can be seen in Figure 34 this did not
+improve disentanglement scores, yet the latent traversals
+look slightly more realistic (Figure 35).
+In summary, InfoWGAN-GP can help prevent the instabili-
+ties in training faced by InfoGAN, but it does not help over-
+come the following weaknesses compared to V AE-based
+methods: 1) Disentangling performance is sensitive to the
+number of code latents. 2) More often than not, the noise
+variables contain semantically meaningful information. 3)
+The model does not always generalise well to all across the
+domain of p(z).
+I. Further Experimental Results
+From Figure 37, we see that higher values ofγin FactorV AE
+leads to a lower discriminator accuracy. This is as expected,
+since a higher γencourages q(z) and ∏
+jq(zj) to be closer
+together, hence a lower accuracy for the discriminator to
+successfully classify samples from the two distributions.
+We also show histograms of q(zj) for each j in β-V AE
+
+--- PAGE 18 ---
+Disentangling by Factorising
+Figure 36.Same as Figure 25 but for InfoWGAN-GP.
+discriminator accuracy
+iteration
+Figure 37.Plot of discriminator accuracy of FactorV AE on 2D
+Shapes data across iterations over 5 random seeds.
+reconstruction error
+iteration iteration
+Figure 38.Same as Figure 12 but for 3D Chairs.
+and FactorV AE for different values ofβ and γ at the end
+of training on 2D Shapes in Figure 40. We can see that
+the marginals of FactorV AE are quite different from the
+prior, which could be a reason that the variant of FactorV AE
+using the objective given by Eqn. (12) leads to different
+results to FactorV AE. For FactorV AE, the model is able to
+focus on factorising q(z) instead of pushing it towards some
+reconstruction error
+iteration iteration
+Figure 39.Same as Figure 12 but for CelebA.
+arbitrarily speciﬁed prior p(z).
+
+--- PAGE 19 ---
+Disentangling by Factorising
+-VAE
+FactorVAE
+Figure 40.Histograms of q(zj) for each j (columns) for β-V AE and FactorV AE at the end of training on 2D Shapes, with the pdf of
+Gaussian N(0,1) overlaid in red. The rows correspond to different values of β(1,4,16,64) and γ(10,20,40,80) respectively.
+

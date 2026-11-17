@@ -1,0 +1,2 @@
+Model,Beta,Reconstruction_MSE,MIG,DCI_Disentanglement,FactorVAE_Score
+Beta-TCVAE,6.0,0.00785,0.1512,0.3674,0.5667

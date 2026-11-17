@@ -1,0 +1,563 @@
+--- Page 8 ---
+Disentangling Disentanglement in Variational Autoencoders
+0 200 400 600 800 1000
+alpha
+0.2
+0.3
+0.4
+0.5Avg. Normalised Sparsity
+0 200 400 600 800 1000
+alpha
+1150
+1200
+1250
+1300
+1350Avg. log-likelihood
+0 200 400 600 800 1000
+alpha
+10− 2
+10− 1
+100
+101
+Avg. MMD(q(z),p(z))
+γ = 0,     β = 0.1
+γ = 0.8,  β = 0.1
+γ = 0,     β = 1
+γ = 0.8,  β = 1
+γ = 0,     β = 5
+γ = 0.8,  β = 5
+Figure 4.[Left] Sparsity vs regularisation strength α (c.f. (7), high better). [Center] Average reconstruction log-likelihood
+EpD(x)[Eqφ(z|x)[log pθ(x|z)]] vs α (higher better). [Right] Divergence ( MMD ) vs α (lower better). Note here that the different
+values of γrepresent regularizations to different distributions, with regularization to a Gaussian (i.e. γ = 0) much easier to achieve than
+the sparse prior, hence the lower divergence. Shaded areas represent ±2 standard errors in the mean estimate calculated using 8 separately
+trained networks. See Appendix B for full experimental details.
+0 5 10 15 20 25 30 35 40 45
+Latent dimension
+0.0
+0.2
+0.4
+0.6Avg. latent magnitude
+Trouser
+Dress
+Shirt
+(a) (b) (c) (d)
+Figure 5.Qualitative evaluation of sparsity. [Top] Average encod-
+ing magnitude over data for three example classes in Fashion-
+MNIST. [Bottom] Latent interpolation (↓) for different datapoints
+(top layer) along particular ‘active’ dimensions. (a) Separation
+between the trouser legs (dim 49). (b) Top/Collar width of dresses
+(dim 30). (c) Shirt shape (loose/ﬁtted, dim 19). (d) Style of sleeves
+across different classes—t-shirt, dress, and coat (dim 40).
+Concurrent to our work, Tonolini et al. (2019) also consid-
+ered imposing sparsity in VAEs with a spike-slab prior (such
+that σ0 →0). In contrast to our work, they do not impose
+a constraint on the aggregate encoder, nor do they evaluate
+their results with a quantitative sparsity metric that accounts
+for the varying length scales of different latent dimensions
+7. Discussion
+Characterising Overlap Precisely formalising what con-
+stitutes the level of overlap in the latent space is surprisingly
+subtle. Prior work has typically instead considered control-
+ling the level of compression through the mutual information
+between data and latents I(x; z) (Alemi et al., 2018; 2017;
+Hoffman and Johnson, 2016; Phuong et al., 2018), with,
+for example, (Phuong et al., 2018) going on to discuss how
+controlling the compression can “explicitly encourage use-
+ful representations.” Although I(x; z) provides a perfectly
+serviceable characterisation of overlap in a number of cases,
+the two are not universally equivalent and we argue that it is
+the latter which is important in achieving useful representa-
+tions. In particular, if the form of the encoding distribution
+is not ﬁxed—as when employing normalising ﬂows, for
+example— I(x; z) does not necessarily characterise overlap
+well. We discuss this in greater detail in Appendix D.
+However, when the encoder is unimodal with ﬁxed form (in
+particularly the tail behaviour is ﬁxed) and the prior is well-
+characterised by Euclidean distances, then these factors have
+a substantially reduced ability to vary for a given I(x; z),
+which subsequently becomes a good characterisation of the
+level of overlap. When qφ(z|x) is Gaussian, controlling the
+variance of qφ(z|x) (with a ﬁxed qφ(z)) should similarly
+provide an effective means of achieving the desired over-
+lap behaviour. As this is the most common use case, we
+leave the development of more a general deﬁnition of over-
+lap to future work, simply noting that this is an important
+consideration when using ﬂexible encoder distributions.
+Can V AEs Uncover True Generative Factors?In con-
+currently published work, Locatello et al. (2019) question
+the plausibility of learning unsupervised disentangled rep-
+resentations with meaningful features, based on theoretical
+analyses showing an equivalence class of generative mod-
+els, many members of which could be entangled. Though
+their analysis is sound, we posit a counterargument to their
+conclusions, based on the stochastic nature of the encodings
+used during training. Namely, that this stochasticity means
+that they need not give rise to the same ELBO scores (an--- Page 9 ---
+Disentangling Disentanglement in Variational Autoencoders
+important exception is the rotational invariance for isotropic
+Gaussian priors). Essentially, the encoding noise forces
+nearby encodings to relate to similar datapoints, while stan-
+dard choices for the likelihood distribution (e.g. assuming
+conditional independence) ensure that information is stored
+in the encodings, not just in the generative network. These
+restrictions mean that the ELBO prefers smooth represen-
+tations and, provided the prior is not rotationally invariant,
+means that there no longer need be a class of different rep-
+resentations with the same ELBO ; simpler representations
+are preferred to more complex ones.
+The exact form of the encoding distribution is also important
+here. For example, imagine we restrict the encoder variance
+to be isotropic and then use a two dimensional prior where
+one latent dimension has a much larger variance than the
+other. It will be possible to store more information in the
+prior dimension with higher variance (as we can spread
+points out more relative to the encoder variance). Conse-
+quently, that dimension is more likely to correspond to an
+important factor of the generative process than the other. Of
+course, this does not imply that this is a true factor of varia-
+tion in the generative process, but neither is the meaning that
+can be attributed to each dimension completely arbitrary.
+All the same, we agree that an important area for future
+work is to assess when, and to what extent, one might expect
+learned representations to mimic the true generative process,
+and, critically, when it should not. For this reason, we
+actively avoid including any notion of a true generative
+process in our deﬁnition of decomposition, but note that,
+analogously to disentanglement, it permits such extension
+in scenarios where doing so can be shown to be appropriate.
+8. Conclusions
+In this work, we explored and analysed the fundamental
+characteristics of learning disentangled representations, and
+showed how these can be generalised to a more general
+framework of decomposition (Lipton, 2016). We charac-
+terised the learning of decomposed latent representation
+with VAEs in terms of the control of two factors: i) overlap
+in the latent space between encodings of different datapoints,
+and ii) regularisation of the aggregate encoding distribution
+to the given prior, which encodes the structure one would
+wish for the latent space to have.
+Connecting prior work on disentanglement to this frame-
+work, we analysed the β-VAE objective to show that its
+contribution to disentangling is primarily through direct
+control of the level of overlap between encodings of the
+data, expressed by maximising the entropy of the encoding
+distribution. In the commonly encountered case of assuming
+an isotropic Gaussian prior and an independent Gaussian
+posterior, we showed that control of overlap is the only
+effect of the β-VAE. Motivated by this observation, we
+developed an alternate objective for the ELBO that allows
+control of the two factors of decomposability through an
+additional regularisation term. We then conducted empirical
+evaluations using this objective, targeting alternate forms
+of decompositions such as clustering and sparsity, and ob-
+served the effect of varying the extent of regularisation to
+the prior on the quality of the resulting clustering and sparse-
+ness of the learnt embeddings. The results indicate that we
+were successful in attaining those decompositions.
+Acknowledgements
+EM, TR, YWT were supported in part by the European Re-
+search Council under the European Union’s Seventh Frame-
+work Programme (FP7/2007–2013) / ERC grant agreement
+no. 617071. TR research leading to these results also re-
+ceived funding from EPSRC under grant EP/P026753/1.
+EM was also supported by Microsoft Research through
+its PhD Scholarship Programme. NS was funded by EP-
+SRC/MURI grant EP/N019474/1.
+References
+Alessandro Achille and Stefano Soatto. Emergence of in-
+variance and disentanglement in deep representations.
+Journal of Machine Learning Research, 19(50), 2019.
+Alexander Alemi, Ben Poole, Ian Fischer, Joshua Dillon,
+Rif A Saurous, and Kevin Murphy. Fixing a broken
+ELBO. In International Conference on Machine Learn-
+ing, pages 159–168, 2018.
+Alexander A Alemi, Ian Fischer, Joshua V Dillon, and Kevin
+Murphy. Deep variational information bottleneck. In
+International Conference on Learning Representations,
+2017.
+Abdul Fatir Ansari and Harold Soh. Hyperprior induced
+unsupervised disentanglement of latent representations.
+In AAAI Conference on Artiﬁcial Intelligence, 2019.
+Yoshua Bengio, Aaron Courville, and Pascal Vincent. Repre-
+sentation learning: A review and new perspectives. IEEE
+Trans. Pattern Anal. Mach. Intell., 35(8):1798–1828, Au-
+gust 2013. ISSN 0162-8828.
+Diane Bouchacourt, Ryota Tomioka, and Sebastian
+Nowozin. Multi-level variational autoencoder: Learning
+disentangled representations from grouped observations.
+In AAAI Conference on Artiﬁcial Intelligence, 2018.
+Christopher P. Burgess, Irina Higgins, Arka Pal, Loïc
+Matthey, Nick Watters, Guillaume Desjardins, and
+Alexander Lerchner. Understanding disentangling in β-
+vae. CoRR, abs/1804.03599, 2018.--- Page 10 ---
+Disentangling Disentanglement in Variational Autoencoders
+Ricky T. Q. Chen, Xuechen Li, Roger Grosse, and David
+Duvenaud. Isolating sources of disentanglement in varia-
+tional autoencoders. In Advances in Neural Information
+Processing Systems, 2018.
+Xi Chen, Yan Duan, Rein Houthooft, John Schulman, Ilya
+Sutskever, and Pieter Abbeel. Infogan: Interpretable
+representation learning by information maximizing gener-
+ative adversarial nets. In Advances in Neural Information
+Processing Systems, pages 2172–2180, 2016.
+Xi Chen, Diederik P Kingma, Tim Salimans, Yan Duan,
+Prafulla Dhariwal, John Schulman, Ilya Sutskever, and
+Pieter Abbeel. Variational Lossy Autoencoder. 2017.
+Brian Cheung, Jesse A Livezey, Arjun K Bansal, and
+Bruno A Olshausen. Discovering hidden factors of varia-
+tion in deep networks. arXiv preprint arXiv:1412.6583,
+2014.
+Adam Coates and Andrew Y . Ng. The importance of encod-
+ing versus training with sparse coding and vector quanti-
+zation. In Lise Getoor and Tobias Scheffer, editors,ICML,
+pages 921–928. Omnipress, 2011.
+Nat Dilokthanakul, Nick Pawlowski, and Murray Shanahan.
+Explicit information placement on latent variables using
+auxiliary generative modelling task, 2019. URL https:
+//openreview.net/forum?id=H1l-SjA5t7.
+Justin Domke and Daniel Sheldon. Importance weighting
+and varational inference. In Advances in Neural Informa-
+tion Processing Systems, pages 4471––4480, 2018.
+Cian Eastwood and Christopher K. I. Williams. A frame-
+work for the quantitative evaluation of disentangled rep-
+resentations. In International Conference on Learning
+Representations, 2018.
+Babak Esmaeili, Hao Wu, Sarthak Jain, N Siddharth, Brooks
+Paige, and Jan-Willem van de Meent. Hierarchical Dis-
+entangled Representations. Artiﬁcial Intelligence and
+Statistics, 2019.
+Irina Higgins, Loic Matthey, Arka Pal, Christopher Burgess,
+Xavier Glorot, Matthew Botvinick, Shakir Mohamed, and
+Alexander Lerchner. beta-V AE: Learning basic visual
+concepts with a constrained variational framework. In
+Proceedings of the International Conference on Learning
+Representations, 2016.
+Irina Higgins, David Amos, David Pfau, Sebastien
+Racaniere, Loic Matthey, Danilo Rezende, and Alexander
+Lerchner. Towards a deﬁnition of disentangled represen-
+tations. arXiv preprint arXiv:1812.02230, 2018.
+R Devon Hjelm, Alex Fedorov, Samuel Lavoie-Marchildon,
+Karan Grewal, Phil Bachman, Adam Trischler, and
+Yoshua Bengio. Learning deep representations by mutual
+information estimation and maximization. In Interna-
+tional Conference on Learning Representations, 2019.
+Matthew D Hoffman and Matthew J Johnson. ELBO
+surgery: yet another way to carve up the variational evi-
+dence lower bound. In Workshop on Advances in Approx-
+imate Bayesian Inference, NIPS, pages 1–4, 2016.
+Matthew D Hoffman, Carlos Riquelme, and Matthew J
+Johnson. The β-V AE’s Implicit Prior. InWorkshop on
+Bayesian Deep Learning, NIPS, pages 1–5, 2017.
+Niall P. Hurley and Scott T. Rickard. Comparing measures
+of sparsity. IEEE Transactions on Information Theory,
+55:4723–4741, 2008.
+Aapo Hyvärinen and Erkki Oja. Independent component
+analysis: algorithms and applications. Neural networks,
+13(4-5):411–430, 2000.
+Matthew Johnson, David K Duvenaud, Alex Wiltschko,
+Ryan P Adams, and Sandeep R Datta. Composing graph-
+ical models with neural networks for structured represen-
+tations and fast inference. In Advances in Neural Infor-
+mation Processing Systems, pages 2946–2954. 2016.
+Hyunjik Kim and Andriy Mnih. Disentangling by factoris-
+ing. In International Conference on Machine Learning,
+2018.
+Diederik P. Kingma and Jimmy Ba. Adam: A method for
+stochastic optimization. In International Conference on
+Learning Representations, 2015.
+Diederik P. Kingma and Max Welling. Auto-encoding vari-
+ational bayes. In International Conference on Learning
+Representations, 2014.
+Diederik P Kingma, Shakir Mohamed, Danilo Jimenez
+Rezende, and Max Welling. Semi-supervised learning
+with deep generative models. In Advances in Neural
+Information Processing Systems, 2014.
+Soheil Kolouri, Phillip E. Pope, Charles E. Martin, and
+Gustavo K. Rohde. Sliced wasserstein auto-encoders. In
+International Conference on Learning Representations,
+2019.
+Abhishek Kumar, Prasanna Sattigeri, and Avinash Balakr-
+ishnan. Variational Inference of Disentangled Latent Con-
+cepts from Unlabeled Observations. arXiv.org, November
+2017.
+Hugo Larochelle and Yoshua Bengio. Classiﬁcation using
+discriminative restricted boltzmann machines. In Interna-
+tional Conference on Machine Learning, pages 536–543,
+New York, NY , USA, 2008. ACM. ISBN 978-1-60558-
+205-4.--- Page 11 ---
+Disentangling Disentanglement in Variational Autoencoders
+Honglak Lee, Alexis Battle, Rajat Raina, and Andrew Y .
+Ng. Efﬁcient sparse coding algorithms. In B. Schölkopf,
+J. C. Platt, and T. Hoffman, editors, Advances in Neural
+Information Processing Systems, pages 801–808. MIT
+Press, 2007.
+Zachary C Lipton. The mythos of model interpretability.
+arXiv preprint arXiv:1606.03490, 2016.
+Francesco Locatello, Stefan Bauer, Mario Lucic, Sylvain
+Gelly, Bernhard Schölkopf, and Olivier Bachem. Chal-
+lenging common assumptions in the unsupervised learn-
+ing of disentangled representations. International Con-
+ference on Machine Learning, 2019.
+Chris J Maddison, John Lawson, George Tucker, Nico-
+las Heess, Mohammad Norouzi, Andriy Mnih, Arnaud
+Doucet, and Yee Teh. Filtering variational objectives.
+In Advances in Neural Information Processing Systems,
+pages 6573–6583, 2017.
+Alireza Makhzani, Jonathon Shlens, Navdeep Jaitly, Ian
+Goodfellow, and Brendan Frey. Adversarial autoencoders.
+arXiv preprint arXiv:1511.05644, 2015.
+Michael F Mathieu, Junbo Jake Zhao, Junbo Zhao, Aditya
+Ramesh, Pablo Sprechmann, and Yann LeCun. Disen-
+tangling factors of variation in deep representation using
+adversarial training. In Advances in Neural Information
+Processing Systems, pages 5040–5048, 2016.
+Loic Matthey, Irina Higgins, Demis Hassabis, and Alexan-
+der Lerchner. dsprites: Disentanglement testing sprites
+dataset. https://github.com/deepmind/dsprites-dataset/,
+2017.
+B. Olshausen and D. Field. Emergence of simple-cell recep-
+tive ﬁeld properties by learning a sparse code for natural
+images. Nature, 381:607–609, 1996.
+Kaare Brandt Petersen, Michael Syskind Pedersen, et al.
+The matrix cookbook. Technical University of Denmark,
+7(15):510, 2008.
+Mary Phuong, Max Welling, Nate Kushman, Ryota
+Tomioka, and Sebastian Nowozin. The mutual autoen-
+coder: Controlling information in latent code represen-
+tations, 2018. URL https://openreview.net/forum?id=
+HkbmWqxCZ.
+Alec Radford, Luke Metz, and Soumith Chintala. Unsu-
+pervised representation learning with deep convolutional
+generative adversarial networks. In International Confer-
+ence on Learning Representations, 2016.
+Tom Rainforth, Robert Cornish, Hongseok Yang, Andrew
+Warrington, and Frank Wood. On nesting monte carlo es-
+timators. In International Conference on Machine Learn-
+ing, pages 4264–4273, 2018a.
+Tom Rainforth, Adam R. Kosiorek, Tuan Anh Le, Chris J.
+Maddison, Maximilian Igl, Frank Wood, and Yee Whye
+Teh. Tighter variational bounds are not necessarily better.
+International Conference on Machine Learning, 2018b.
+Marc Ranzato, Christopher Poultney, Sumit Chopra, and
+Yann L. Cun. Efﬁcient learning of sparse representations
+with an energy-based model. In Advances in Neural
+Information Processing Systems, pages 1137–1144. MIT
+Press, 2007.
+Sashank J. Reddi, Satyen Kale, and Sanjiv Kumar. On
+the convergence of adam and beyond. In International
+Conference on Learning Representations, 2018.
+Scott Reed, Kihyuk Sohn, Yuting Zhang, and Honglak Lee.
+Learning to disentangle factors of variation with manifold
+interaction. In International Conference on Machine
+Learning, pages 1431–1439, 2014.
+Danilo Jimenez Rezende, Shakir Mohamed, and Daan Wier-
+stra. Stochastic backpropagation and approximate infer-
+ence in deep generative models. 2014.
+Michal Rolinek, Dominik Zietlow, and Georg Martius. Vari-
+ational Autoencoders Pursue PCA Directions (by Acci-
+dent). arXiv preprint arXiv:1812.06775, 2018.
+Jürgen Schmidhuber. Learning factorial codes by pre-
+dictability minimization. Neural Computation, 4(6):863–
+879, 1992.
+N. Siddharth, T Brooks Paige, Jan-Willem Van de Meent, Al-
+ban Desmaison, Noah Goodman, Pushmeet Kohli, Frank
+Wood, and Philip Torr. Learning disentangled representa-
+tions with semi-supervised deep generative models. InAd-
+vances in Neural Information Processing Systems, pages
+5925–5935, 2017.
+Jan Stühmer, Richard Turner, and Sebastian Nowozin. ISA-
+V AE: Independent subspace analysis with variational au-
+toencoders, 2019. URL https://openreview.net/forum?
+id=rJl_NhR9K7.
+Ilya Tolstikhin, Olivier Bousquet, Sylvain Gelly, and Bern-
+hard Schoelkopf. Wasserstein auto-encoders. In Interna-
+tional Conference on Learning Representations, 2018.
+Francesco Tonolini, Bjorn Sand Jensen, and Roderick
+Murray-Smith. Variational sparse coding, 2019. URL
+https://openreview.net/forum?id=SkeJ6iR9Km.
+Richard E. Turner and Maneesh Sahani. Two problems
+with variational expectation maximisation for time-series
+models. D. Barber, T. Cemgil, and S. Chiappa (eds.),
+Bayesian Time series models, chapter 5, page 109–130,
+2011.--- Page 12 ---
+Disentangling Disentanglement in Variational Autoencoders
+Han Xiao, Kashif Rasul, and Roland V ollgraf. Fashion-
+mnist: a novel image dataset for benchmarking machine
+learning algorithms, 2017.
+Jiacheng Xu and Greg Durrett. Spherical Latent Spaces for
+Stable Variational Autoencoders. In Conference on Em-
+pirical Methods in Natural Language Processing, 2018.
+Howard Hua Yang and Shun-ichi Amari. Adaptive online
+learning algorithms for blind separation: maximum en-
+tropy and minimum mutual information. Neural compu-
+tation, 9(7):1457–1482, 1997.
+Shengjia Zhao, Jiaming Song, and Stefano Ermon. Infovae:
+Information maximizing variational autoencoders. CoRR,
+abs/1706.02262, 2017. URL http://arxiv.org/abs/1706.
+02262.--- Page 13 ---
+Disentangling Disentanglement in Variational Autoencoders
+A. Proofs for Disentangling theβ-VAE
+Theorem 1. The β-VAE targetLβ(x) can be interpreted in
+terms of the standard ELBO,L(x; πθ,β,qφ), for an adjusted
+target πθ,β(x,z) ≜ pθ(x|z)fβ(z) with annealed prior
+fβ(z) ≜ p(z)β/Fβ as
+Lβ(x) = L(x; πθ,β,qφ) + (β−1)Hqφ + logFβ (3)
+where Fβ ≜
+∫
+zp(z)βdzis constant given β, and Hqφ is
+the entropy of qφ(z|x).
+Proof. Starting with (2), we have
+Lβ(x) = Eqφ(z|x)[log pθ(x|z)] + βHqφ
++ βEqφ(z|x)[log p(z)]
+= Eqφ(z|x)[log pθ(x|z)] + (β−1)Hqφ + Hqφ
++ Eqφ(z|x)
+[
+log p(z)β −log Fβ
+]
++ logFβ
+= Eqφ(z|x)[log pθ(x|z)] + (β−1)Hqφ
+−KL(qφ(z|x) ∥fβ(z)) + logFβ
+=L(x; πθ,β,qφ) + (β−1)Hqφ + logFβ
+as required.
+Corollary 1. If p(z) = N(z; 0,Σ) and qφ(z|x) =
+N(z; µφ(x),Sφ(x)), then,
+Lβ(x; θ,φ) = L(x; θ′,φ′) + (β−1)
+2 log|Sφ′(x)|+ c (4)
+where θ′and φ′represent rescaled networks such that
+pθ′(x|z) = pθ
+(
+x|z/
+√
+β
+)
+,
+qφ′(z|x) = N(z; µφ′(x),Sφ′(x)) ,
+µφ′(x) =
+√
+βµφ(x), S φ′(x) = βSφ(x),
+and c ≜ D(β−1)
+2
+(
+1 + log 2π
+β
+)
++ log Fβ is a constant,
+with Ddenoting the dimensionality of z.
+Proof. We start by noting that
+πθ,β(x) = Efβ(z)[pθ(x|z)] = Ep(z)
+[
+pθ
+(
+x|z/
+√
+β
+)]
+= Ep(z)[pθ′(x|z)] = pθ′(x)
+Now considering an alternate form of L(x; πθ,β,qφ) in (3),
+L(x; πθ,β,qφ)
+= logπθ,β(x) −KL(qφ(z|x) ∥πθ,β(z|x))
+= logpθ′(x) −Eqφ(z|x)
+[
+log
+(qφ(z|x)pθ′(x)
+pθ(x|z)fβ(z)
+)]
+= logpθ′(x)
+−Eqφ′(z|x)
+[
+log
+(
+qφ
+(
+z/√β |x
+)
+pθ′(x)
+pθ(x|z/√β)fβ(z/√β)
+)]
+. (8)
+We ﬁrst simplify fβ(z/√β) as
+fβ(z/
+√
+β) = 1√
+2π|Σ/β|
+exp
+(
+−1
+2zTΣ−1z
+)
+= p(z)β(D/2).
+Further, denoting z†= z−√βµφ′(x), and z‡= z†/√β =
+z/√β−µφ′(x), we have
+qφ′(z|x) = 1√
+2π|Sφ(x)β|
+exp
+(
+−1
+2βzT
+†Sφ(x)−1z†
+)
+,
+qφ
+( z√β |x
+)
+= 1√
+2π|Sφ(x)|
+exp
+(
+−1
+2zT
+‡Sφ(x)−1z‡
+)
+giving qφ
+(
+z/
+√
+β |x
+)
+= qφ′(z|x)β(D/2).
+Plugging these back in to (8) while remembering pθ(x |
+z/√β) = pθ′(x|z), we have
+L(x; πθ,β,qφ)
+= log pθ′(x) −Eqφ′(z|x)
+[
+log
+(qφ′(z|x)pθ′(x)
+pθ′(x|z)p(z)
+)]
+= L(x; θ,φ),
+showing that the ELBOs for the two setups are the same.
+For the entropy term, we note that
+Hqφ = D
+2 (1 + log 2π) + 1
+2 log|Sφ(x)|
+= D
+2
+(
+1 + log 2π
+β
+)
++ 1
+2 log|Sφ′(x)|.
+Finally substituting for Hqφ and L(x; πθ,β,qφ) in (3) gives
+the desired result.
+Corollary 2. Let [θ′,φ′] = gβ([θ,φ]) represent the trans-
+formation required to produced the rescaled networks in
+Corollary 1. If 0 <|det ∇θ,φg([θ,φ])|<∞∀[θ,φ], then
+∇θ,φLβ(x; θ,φ) = 0 ⇔ ∇θ′,φ′LH,β(x; θ′,φ′) = 0.
+Thus [θ∗,φ∗] being a stationary point of 1
+n
+∑n
+i=1Lβ(xi; θ,φ)
+indicates that gβ([θ∗,φ∗]) is a stationary point of
+1
+n
+∑n
+i=1 LH,β(xi; θ′,φ′) and vice-versa.
+Proof. Starting from Corollary 1 we have that
+∇θ,φLβ(x; θ,φ)= ∇θ,φLH,β(x; θ′,φ′)
+=(∇θ,φgβ([θ,φ])) ∇θ′,φ′LH,β(x; θ′,φ′) ,
+so∇θ′,φ′LH,β(x; θ′,φ′)= 0=⇒∇θ,φLβ(x; θ,φ)= 0 given
+our assumption that |det ∇θ,φg([θ,φ])|<∞∀[θ,φ]. Fur-
+ther, as 0 <|det ∇θ,φg([θ,φ])|∀[θ,φ], (∇θ,φgβ([θ,φ]))−1
+exists and has a ﬁnite determinant, so ∇θ,φLβ(x; θ,φ) = 0
+also implies ∇θ′,φ′LH,β(x; θ′,φ′) = 0.
